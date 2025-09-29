@@ -15,7 +15,7 @@ exports.register = async (req, res) =>{
 
         // consulta SQL para inserir usuario, incluindo o tipo_usuario
         const resultado = await db.query(
-            'INSERT INTO usuario(email,senha,tipo_usuario) VALUES (1$, 2$, 3$) RETURNING *',
+            'INSERT INTO usuarios(email,senha,tipo_usuario) VALUES (1$, 2$, 3$) RETURNING *',
             [email, senhaCripto, tipo_usuario || 'comum']
         );
 
@@ -43,10 +43,10 @@ exports.login = async(req, res) => {
         return res.status(400).json({message: "Email e senha obrigatórios."});
     }
     try{
-        const resultado = await db.query('SELECT * FROM usuario WHERE   EMAIL = $1', [email]);
+        const resultado = await db.query('SELECT * FROM usuarios WHERE   EMAIL = $1', [email]);
         const user = resultado.row[0];
 
-        if(!usuario) {
+        if(!user) {
             return res.status(401).json({message:'Credenciais inválidas.'});
         }
 
@@ -68,4 +68,9 @@ exports.login = async(req, res) => {
         console.log('Erro no login:', error);
         res.status(500).json({message: 'Erro no servidor', error: error.message});
     }
-}
+};
+
+module.exports ={
+    register: exports.register,
+    login: exports.login,
+};
