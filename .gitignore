@@ -1,0 +1,47 @@
+# Arquivos de Sistema
+.DS_Store # Mac
+Thumbs.db # Windows
+
+# Node.js
+# Dependências do projeto
+/01_api_nodejs/node_modules
+/01_api_nodejs/npm-debug.log*
+
+# Variáveis de ambiente
+/01_api_nodejs/.env
+
+# Outros
+/01_api_nodejs/dist/
+/01_api_nodejs/tmp/
+
+# Python
+# Ambiente virtual
+/02_sistema_python/venv/
+
+# Arquivos de cache e de compilação
+/02_sistema_python/__pycache__/
+/02_sistema_python/*.pyc
+
+# Banco de dados local
+/02_sistema_python/academico_local.db
+
+# Logs
+/02_sistema_python/logs/
+
+# C
+# Arquivos de bibliotecas compiladas
+/03_algorithms_c/*.so # Linux/Mac
+/03_algorithms_c/*.dll # Windows
+/03_algorithms_c/*.o # Objetos compilados
+
+# IDEs e Editores de Código
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Dados sensíveis e temporários
+*.log
+*.txt
+*.sqlite
+/uploads/
