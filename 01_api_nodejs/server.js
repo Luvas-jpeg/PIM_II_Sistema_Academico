@@ -22,7 +22,11 @@ app.get('/health', (req, res) => {
     res.status(200).json({status: "ok", message: "API is running"});
 });
 
-const authRoutes = require('./routes/academicRoutes');
+const authRoutes = require('./routes/authRoutes');
+app.use('/api/auth',authRoutes);
+
+const academicRoutes = require('./routes/academicRoutes')
+app.use('/api/academico', academicRoutes)
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>{
