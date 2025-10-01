@@ -1,25 +1,25 @@
 const db = require("../models/db");
 
 //Funcao para criar nova turma
-exports.createTurma = async (req, res) =>{
-    const {nome_turma, ano} = req.body;
-    // req.user futuro!
-    const professor_id = 1;
+// Função para criar uma nova turma
+exports.createTurma = async (req, res) => {
+    const { nome_turma, ano } = req.body;
+    const professor_id = 1; 
 
-    try{
-        const sql = 'INSERT INTO turmas (nome_turma, ano, professor_id) VALUES (1$, 2$, 3$) RETURNING *';
-        const parametro = [nome_turma, ano, professor_id];
-
-        const resultado = await db.query(sql, parametro);
-        const novaTurma = resultado.rows[0];
+    try {
+        const sql = 'INSERT INTO turmas (nome_turma, ano, professor_id) VALUES ($1, $2, $3) RETURNING *';
+        const params = [nome_turma, ano, professor_id];
+        
+        const result = await db.query(sql, params);
+        const novaTurma = result.rows[0];
 
         res.status(201).json({
-            mssage: 'Turma criada!',
+            message: 'Turma criada com sucesso!',
             turma: novaTurma
         });
     } catch (error) {
-        console.error('Erro ao criar turmar:', error);
-        res.status(500).json({message: 'Erro no servidor', error: error.message});
+        console.error('Erro ao criar turma:', error);
+        res.status(500).json({ message: 'Erro no servidor', error: error.message });
     }
 };
 
@@ -31,7 +31,7 @@ exports.getAllTurmas = async (req, res) => {
 
         res.status(200).json({
             message: 'Lista de turmas',
-            turmas: resultado,rows
+            turmas: resultado.rows
         });
     } catch (error) {
         console.error('Erro ao listar turmas:', error);

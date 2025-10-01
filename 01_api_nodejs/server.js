@@ -26,7 +26,7 @@ const authRoutes = require('./routes/authRoutes');
 app.use('/api/auth',authRoutes);
 
 const academicRoutes = require('./routes/academicRoutes')
-app.use('api/academico', academicRoutes)
+app.use('/api/academico', academicRoutes)
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>{
