@@ -1,11 +1,16 @@
+// routes/academicRoutes.js
+
 const express = require('express');
 const router = express.Router();
 const academicController = require('../controllers/academicController');
 
-// Rota para criar uma nova turma
-router.post('/turmas', academicController.createTurma);
+// Importa o middleware de autenticação
+const academicMiddleware = require('../middlewares/academicMiddleware');
 
-//Rota para listar todas as turmas
-router.get('/turmas', academicController.getAllTurmas);
+// Rota para criar uma nova turma (requer autenticação e permissão de professor/admin)
+router.post('/turmas', academicMiddleware.isAuthenticated, academicMiddleware.isProfessorOrAdmin, academicController.createTurma);
 
-module.exports = router
+// Rota para listar todas as turmas (requer autenticação e permissão de professor/admin)
+router.get('/turmas', academicMiddleware.isAuthenticated, academicMiddleware.isProfessorOrAdmin, academicController.getAllTurmas);
+
+module.exports = router;
