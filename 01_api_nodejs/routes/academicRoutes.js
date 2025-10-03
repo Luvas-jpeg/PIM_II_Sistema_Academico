@@ -7,10 +7,34 @@ const academicController = require('../controllers/academicController');
 // Importa o middleware de autenticação
 const academicMiddleware = require('../middlewares/academicMiddleware');
 
-// Rota para criar uma nova turma (requer autenticação e permissão de professor/admin)
-router.post('/turmas', academicMiddleware.isAuthenticated, academicMiddleware.isProfessorOrAdmin, academicController.createTurma);
+// Acesso restrito a usuários autenticados e com a permissão correta
+router.post(
+    '/turmas', 
+    academicMiddleware.isAuthenticated, 
+    academicMiddleware.isProfessorOrAdmin, 
+    academicController.createTurma
+);
 
-// Rota para listar todas as turmas (requer autenticação e permissão de professor/admin)
-router.get('/turmas', academicMiddleware.isAuthenticated, academicMiddleware.isProfessorOrAdmin, academicController.getAllTurmas);
+// Acesso restrito a usuários autenticados e com a permissão correta
+router.get(
+    '/turmas', 
+    academicMiddleware.isAuthenticated, 
+    academicMiddleware.isProfessorOrAdmin, 
+    academicController.getAllTurmas
+);
+
+// Rota para criar uma nova disciplina
+router.post(
+    '/disciplinas',
+    academicMiddleware.isAuthenticated,
+    academicController.createDisciplina
+);
+
+// Rota para listar todas as disciplinas
+router.get(
+    '/disciplinas',
+    academicMiddleware.isAuthenticated,
+    academicController.getAllDisciplinas
+);
 
 module.exports = router;
