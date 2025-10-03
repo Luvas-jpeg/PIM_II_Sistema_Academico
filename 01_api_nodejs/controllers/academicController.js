@@ -1,6 +1,6 @@
 const db = require("../models/db");
 
-//Funcao para criar nova turma
+
 // Função para criar uma nova turma
 exports.createTurma = async (req, res) => {
     const { nome_turma, ano } = req.body;
@@ -87,4 +87,14 @@ exports.getAllDisciplinas = async (req, res) => {
         console.error('Erro ao listar disciplinas:', error);
         res.status(500).json({message: 'erro no servidor', error: error.message});
     }
+};
+
+//Função para matricular um aluno em uma turma/disciplina
+exports.matricularAluno = async (req, res) => {
+    // Apenas professoresou admins podem matricular
+    if (req.user.tipo_usuario !== 'professro' && req.user.tipo_usuario !== "admin") {
+        return res.status(403).json({message: "Acesso negado, apenas professores ou administradores podem realizar essa ação"});
+    }
+
+    const { aluno_id, turma_id, disciplina_id} = req.body;
 }
