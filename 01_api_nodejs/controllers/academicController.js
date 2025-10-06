@@ -97,4 +97,23 @@ exports.matricularAluno = async (req, res) => {
     }
 
     const { aluno_id, turma_id, disciplina_id} = req.body;
+
+    if (!aluno_id || !turma_id || !disciplina_id) {
+        return res.status(400).json({message: 'Aluno, turma e disciplina são obrigatórios'});
+
+    }
+
+    try {
+        // Verfica se o aluno existe na tabela alunos
+        const aluno = await db.query('SELECT aluno_id FROM alunos WHERE aluno_id = 1$', [aluno_id])
+        if (aluno.rows.length === 0) {
+            return res.status(404).json ({message : "Aluno não encontrado"});
+        }
+
+        //Verifica se a disciplina existe
+        const disciplina = await db.query('SELECT disciplina_id FROM disciplinas WHERE disciplina_id = 1$', [disciplina_id]);
+        if(disciplina.rows.length === 0) {
+            return res.status(404).json({message: 'Disciplina não encntrado'})
+        }
+    }   
 }
