@@ -171,7 +171,8 @@ def ai():
 				.sidebar a {{ color: #fff; text-decoration: none; padding: 10px 18px; font-size: 1.05em; transition: background 0.2s; }}
 				.sidebar a:hover {{ background: var(--accent-hover); }}
 				.main-content {{ margin-left: 180px; padding: 40px; }}
-				.main-content h1 {{ color: var(--sidebar-bg); font-size: 2.2em; margin-bottom: 20px; }}
+				.main-content h1 {{ color: var(--sidebar-bg); font-size: 2.2em; margin-bottom: 8px; }}
+				.main-content p {{ margin-top: 6px; color: #222; }}
 				table.boletim {{ border-collapse: collapse; width: 100%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }}
 				table.boletim th, table.boletim td {{ border: 1px solid #ddd; padding: 10px 16px; text-align: center; }}
 				table.boletim th {{ background: var(--sidebar-bg); color: #fff; }}

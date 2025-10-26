@@ -50,7 +50,7 @@ exports.login = async (req, res) => {
         if (!user) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
-        
+
         // Adiciona a verificação da senha com bcrypt
         const isMatch = await bcrypt.compare(senha, user.senha);
         if (!isMatch) {
@@ -79,6 +79,6 @@ exports.login = async (req, res) => {
 
 // Correção: Garante que o objeto está sendo exportado
 module.exports = {
-  register: exports.register,
-  login: exports.login,
+    register: exports.register,
+    login: exports.login,
 };
