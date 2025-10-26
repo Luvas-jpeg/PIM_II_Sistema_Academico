@@ -36,3 +36,11 @@ exports.isProfessorOrAdmin = (req, res, next) => {
     }
     next();
 };
+
+// 3. Middleware para verificar se o usuário é Administrador
+exports.isAdmin = (req, res, next) => {
+    if (!req.user || req.user.tipo_usuario !== 'admin') {
+        return res.status(403).json({ message: 'Acesso negado. Apenas administradores podem realizar esta ação.' });
+    }
+    next();
+};
