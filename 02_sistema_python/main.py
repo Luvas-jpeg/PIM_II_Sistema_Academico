@@ -58,26 +58,26 @@ try:
     lib_name = "algorithms.dll" if platform.system() == "Windows" else "algorithms.so"
     # O caminho é relativo à pasta 02_sistema_python (onde o main.py está)
     lib_path = os.path.join(os.path.dirname(__file__), "..", "03_algorithms_c", lib_name)
-    
+
     lib_c = ctypes.CDLL(lib_path)
-    
+
     # Definir a estrutura (struct) em Python
     class DesempenhoAluno(ctypes.Structure):
         _fields_ = [("id_aluno", ctypes.c_int), ("media_final", ctypes.c_float)]
 
     # Definir interface da função C: ordenar_por_desempenho
     lib_c.ordenar_por_desempenho.argtypes = [
-        ctypes.POINTER(DesempenhoAluno), 
+        ctypes.POINTER(DesempenhoAluno),
         ctypes.c_int
     ]
     lib_c.ordenar_por_desempenho.restype = None
-    
-    print("✅ (Flask) Biblioteca C 'algorithms' carregada com sucesso.")
+
+    print("(Flask) Biblioteca C 'algorithms' carregada com sucesso.")
 
 except Exception as e:
-    print(f"❌ (Flask) ERRO AO CARREGAR BIBLIOTECA C: {e}")
+    print(f"(Flask) ERRO AO CARREGAR BIBLIOTECA C: {e}")
     print("   As funcionalidades de relatório C (ordenação) estarão desativadas.")
-    lib_c = None # Garante que o app rode mesmo se o C falhar
+    lib_c = None  # Garante que o app rode mesmo se o C falhar
 
 # --------------------------------------------------------------------------------------
 # FUNÇÕES DE RENDERIZAÇÃO E BASE HTML
@@ -179,7 +179,7 @@ def render_login_base(content_html, page_title="Login"):
 
 # FUNÇÃO 2: Layout para o Aplicativo (COM Sidebar) - Renomeie sua função antiga
 def render_app_base(content_html, page_title="Sistema Acadêmico"):
-    # ⚠️ Certifique-se de que esta é a sua função com o código da SIDEBAR
+    # Certifique-se de que esta é a sua função com o código da SIDEBAR
     app_base_html = f'''
     <!DOCTYPE html>
     <a href="{url_for('dashboard')}">Home</a>
@@ -423,9 +423,19 @@ def render_professor_content(user_type, turmas, message, message_class):
         box_class = 'success' if message_class == 'success' else 'error'
         feedback_html = f'<div class="feedback-box {box_class}">{escape(message)}</div>'
     
-    # Contagem de estatísticas
-    total_turmas = len(set(t.get('turma_id') for t in turmas)) if turmas else 0
-    total_disciplinas = len(turmas) if turmas else 0
+    # Contagem de estatísticas (calcula após agrupamento para evitar duplicatas)
+    turmas_agrupadas_temp = {}
+    if turmas:
+        for t in turmas:
+            turma_id = t.get('turma_id')
+            disciplina_id = t.get('disciplina_id')
+            if turma_id not in turmas_agrupadas_temp:
+                turmas_agrupadas_temp[turma_id] = set()
+            if disciplina_id:
+                turmas_agrupadas_temp[turma_id].add(disciplina_id)
+    
+    total_turmas = len(turmas_agrupadas_temp) if turmas else 0
+    total_disciplinas = sum(len(discs) for discs in turmas_agrupadas_temp.values()) if turmas else 0
     
     # Header com estatísticas
     header_html = f"""
@@ -447,17 +457,25 @@ def render_professor_content(user_type, turmas, message, message_class):
     
     # Cards de Turmas e Disciplinas
     if turmas:
-        # Agrupa disciplinas por turma
+        # Agrupa disciplinas por turma, removendo duplicatas
         turmas_agrupadas = {}
         for t in turmas:
             turma_id = t.get('turma_id')
+            disciplina_id = t.get('disciplina_id')
+            
             if turma_id not in turmas_agrupadas:
                  turmas_agrupadas[turma_id] = {
                      'nome': t.get('nome_turma'), 
                      'ano': t.get('ano'), 
-                     'disciplinas': []
+                     'disciplinas': {}  # Usa dict para evitar duplicatas (chave: disciplina_id)
                  }
-            turmas_agrupadas[turma_id]['disciplinas'].append(t)
+            
+            # Só adiciona a disciplina se ela ainda não existir nesta turma
+            if disciplina_id and disciplina_id not in turmas_agrupadas[turma_id]['disciplinas']:
+                turmas_agrupadas[turma_id]['disciplinas'][disciplina_id] = {
+                    'disciplina_id': disciplina_id,
+                    'nome_disciplina': t.get('nome_disciplina', 'N/A')
+                }
         
         turmas_cards_html = '<div class="turmas-grid">'
         
@@ -466,9 +484,9 @@ def render_professor_content(user_type, turmas, message, message_class):
             ano = info['ano']
             
             disciplinas_html = ''
-            for disc_info in info['disciplinas']:
-                disciplina_id = disc_info.get('disciplina_id')
-                disciplina_nome = escape(disc_info.get('nome_disciplina', 'N/A'))
+            # Converte o dict de disciplinas para lista e renderiza
+            for disciplina_id, disc_info in info['disciplinas'].items():
+                disciplina_nome = escape(disc_info['nome_disciplina'])
                 gerenciar_url = url_for('gerenciar_turma', turma_id=turma_id, disciplina_id=disciplina_id) if disciplina_id else '#'
                 
                 disciplinas_html += f"""
@@ -506,7 +524,7 @@ def render_professor_content(user_type, turmas, message, message_class):
     {professor_css}
     {header_html}
     {feedback_html}
-    <h2 style="color: #333; margin-top: 30px; margin-bottom: 20px;">📋 Minhas Turmas e Disciplinas</h2>
+    <h2 style="color: #333; margin-top: 30px; margin-bottom: 20px;">Minhas Turmas e Disciplinas</h2>
     {turmas_cards_html}
     """
 
@@ -559,7 +577,7 @@ def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
         '''
     html += '</table>'
     return html
-def render_admin_content(user_type, recursos, feedback_msg, feedback_cls):
+def render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token=None):
     print(f"\n--- [render_admin_content] Iniciando Renderização ---")
     print(f"[render_admin_content] Número de Professores Recebidos: {len(recursos.get('professores', []))}")
     print(f"[render_admin_content] Número de Alunos Recebidos: {len(recursos.get('alunos', []))}\n")
@@ -853,62 +871,756 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls):
     """
 
     # === SEÇÃO 4: AÇÕES DESTRUTIVAS ===
+    # Preparar dados para JavaScript (disciplinas por turma e matrículas)
+    turmas_json = {str(t['turma_id']): {'nome': t['nome_turma'], 'ano': t['ano']} for t in recursos['turmas']}
+    
+    # Buscar disciplinas associadas a cada turma (usando dados disponíveis)
+    disciplinas_por_turma = {}
+    try:
+        # Tenta buscar disciplinas de cada turma via API
+        token = session.get(SESSION_KEY_TOKEN)
+        for turma in recursos['turmas']:
+            turma_id = str(turma['turma_id'])
+            disciplinas_por_turma[turma_id] = []
+            # Nota: Será preenchido dinamicamente via JavaScript se necessário
+    except:
+        pass
+    
+    # Preparar opções de alunos para busca de matrícula
+    alunos_options = ''
+    if 'alunos' in recursos:
+        alunos_options = ''.join(f'<option value="{a["aluno_id"]}">{escape(a.get("nome", ""))} {escape(a.get("sobrenome", ""))}</option>' for a in recursos.get('alunos', []))
+    
     secao_acoes_destrutivas = f"""
     <div class="admin-section">
         <h2 class="admin-section-title" style="border-bottom-color: #d32f2f;">Ações Destrutivas</h2>
+        
+        <script data-token="{token or ''}">
+        // Dados para filtros dinâmicos
+        const todasDisciplinas = {{{
+            ",".join([f'"{d["disciplina_id"]}": "{escape(d["nome_disciplina"])}"' for d in recursos['disciplinas']])
+        }}};
+        const apiBaseUrl = "{API_BASE_URL}";
+        
+        // Função para obter token da sessão
+        function getToken() {{
+            // Tenta pegar do atributo data-token do script
+            const scriptTag = document.querySelector('script[data-token]');
+            if (scriptTag) {{
+                return scriptTag.getAttribute('data-token') || '';
+            }}
+            // Fallback: tenta pegar do cookie
+            const match = document.cookie.match(/session_token=([^;]+)/);
+            if (match) return match[1];
+            return '';
+        }}
+        
+        // Função para filtrar disciplinas quando turma é selecionada
+        function filtrarDisciplinasPorTurma(turmaId, selectDisciplinaId) {{
+            const select = document.getElementById(selectDisciplinaId);
+            
+            // Limpa opções atuais
+            select.innerHTML = '<option value="">Carregando...</option>';
+            
+            // Se nenhuma turma selecionada, mostra todas
+            if (!turmaId || turmaId === '') {{
+                select.innerHTML = '<option value="">Selecione uma disciplina...</option>';
+                for (const [id, nome] of Object.entries(todasDisciplinas)) {{
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = nome;
+                    select.appendChild(option);
+                }}
+                return;
+            }}
+            
+            // Busca disciplinas desta turma via API
+            fetch(`${{apiBaseUrl}}/academico/turmas/${{turmaId}}/disciplinas`, {{
+                headers: {{'Authorization': 'Bearer ' + getToken()}}
+            }})
+            .then(res => res.json())
+            .then(data => {{
+                select.innerHTML = '<option value="">Selecione uma disciplina...</option>';
+                if (data.disciplinas && data.disciplinas.length > 0) {{
+                    data.disciplinas.forEach(disc => {{
+                        const option = document.createElement('option');
+                        option.value = disc.disciplina_id;
+                        option.textContent = disc.nome_disciplina || todasDisciplinas[disc.disciplina_id] || 'Disciplina';
+                        select.appendChild(option);
+                    }});
+                }} else {{
+                    select.innerHTML = '<option value="">Nenhuma disciplina encontrada para esta turma</option>';
+                }}
+            }})
+            .catch(err => {{
+                console.error('Erro ao buscar disciplinas:', err);
+                select.innerHTML = '<option value="">Erro ao carregar disciplinas</option>';
+            }});
+        }}
+        
+        // Função para buscar matrícula
+        function buscarMatricula() {{
+            const alunoId = document.getElementById('busca_aluno_id').value;
+            const turmaId = document.getElementById('busca_turma_id').value;
+            const disciplinaId = document.getElementById('busca_disciplina_id').value;
+            const resultadoDiv = document.getElementById('resultado_matricula');
+            
+            if (!alunoId || !turmaId || !disciplinaId) {{
+                resultadoDiv.innerHTML = '<p style="color: #666;">Preencha todos os campos para buscar.</p>';
+                return;
+            }}
+            
+            resultadoDiv.innerHTML = '<p>Buscando...</p>';
+            
+            // Busca a matrícula específica (precisa buscar via alunos da turma/disciplina)
+            fetch(`${{apiBaseUrl}}/academico/turmas/${{turmaId}}/disciplinas/${{disciplinaId}}/alunos`, {{
+                headers: {{'Authorization': 'Bearer ' + getToken()}}
+            }})
+            .then(res => res.json())
+            .then(data => {{
+                if (data.alunos && data.alunos.length > 0) {{
+                    // Procura o aluno específico na lista
+                    const alunoEncontrado = data.alunos.find(a => a.aluno_id == alunoId);
+                        if (alunoEncontrado && alunoEncontrado.matricula_id) {{
+                        const matId = alunoEncontrado.matricula_id;
+                        const nomeAluno = (alunoEncontrado.nome || '') + ' ' + (alunoEncontrado.sobrenome || '');
+                        resultadoDiv.innerHTML = `
+                            <div style="background: #f0f0f0; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                                <p><strong>Matrícula encontrada!</strong></p>
+                                <p><strong>ID da Matrícula:</strong> ${{matId}}</p>
+                                <p><strong>Aluno:</strong> ${{nomeAluno.trim()}}</p>
+                                <button type="button" onclick="confirmarExclusaoMatricula(${{matId}})" class="danger" style="margin-top: 10px; width: 100%;">
+                                    Confirmar Exclusão da Matrícula
+                                </button>
+                            </div>
+                        `;
+                    }} else {{
+                        resultadoDiv.innerHTML = '<p style="color: #d32f2f;"> Aluno não encontrado nesta turma/disciplina.</p>';
+                    }}
+                }} else {{
+                    resultadoDiv.innerHTML = '<p style="color: #d32f2f;"> Nenhuma matrícula encontrada com estes critérios.</p>';
+                }}
+            }})
+            .catch(err => {{
+                console.error('Erro:', err);
+                resultadoDiv.innerHTML = '<p style="color: #d32f2f;">Erro ao buscar matrícula. Tente novamente.</p>';
+            }});
+        }}
+        
+        // Função de confirmação antes de ações destrutivas
+        function confirmarAcao(mensagem, formId) {{
+            if (confirm(mensagem)) {{
+                document.getElementById(formId).submit();
+            }}
+        }}
+        
+        function confirmarExclusaoMatricula(matriculaId) {{
+            if (confirm('Tem certeza que deseja excluir esta matrícula? Esta ação é permanente e pode falhar se houver notas lançadas.')) {{
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.innerHTML = `
+                    <input type="hidden" name="action" value="delete_matricula">
+                    <input type="hidden" name="matricula_id" value="${{matriculaId}}">
+                `;
+                document.body.appendChild(form);
+                form.submit();
+            }}
+        }}
+        </script>
+        
         <div class="admin-grid">
             <div class="admin-card danger">
                 <h3>Desassociar Disciplina de Turma</h3>
                 <p style="font-size: 0.9em; color: #666; margin-top: 0;">Remove a disciplina da grade da turma. A disciplina não é excluída do sistema.</p>
-                <form method="POST">
+                <form method="POST" id="form_desassociar" onsubmit="return confirm('Tem certeza que deseja desassociar esta disciplina da turma?')">
                     <input type="hidden" name="action" value="remove_disciplina_from_turma">
                     <label for="remove_turma_id">Turma:</label>
-                    <select name="turma_id" id="remove_turma_id" required>{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <select name="turma_id" id="remove_turma_id" required onchange="filtrarDisciplinasPorTurma(this.value, 'remove_disciplina_id')">
+                        <option value="">Selecione uma turma...</option>
+                        {turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}
+                    </select>
                     <label for="remove_disciplina_id">Disciplina a Remover:</label>
-                    <select name="disciplina_id" id="remove_disciplina_id" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <select name="disciplina_id" id="remove_disciplina_id" required>
+                        <option value="">Selecione primeiro uma turma...</option>
+                    </select>
                     <button type="submit" class="danger">Desassociar Disciplina</button>
                 </form>
             </div>
             
             <div class="admin-card warning">
                 <h3>Limpar Notas de Disciplina</h3>
-                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Exclui TODAS as notas (NP1, NP2, etc.) associadas à disciplina. Use antes de excluir a disciplina.</p>
-                <form method="POST">
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Exclui TODAS as notas (NP1, NP2, Exame, etc.) associadas à disciplina. Use antes de excluir a disciplina.</p>
+                <form method="POST" id="form_limpar_notas" onsubmit="return confirm('ATENÇÃO: Todas as notas desta disciplina serão excluídas permanentemente!\\n\\nTem certeza que deseja continuar?')">
                     <input type="hidden" name="action" value="delete_notas_da_disciplina">
                     <label for="delete_notas_disciplina_id">Disciplina:</label>
-                    <select name="disciplina_id_para_limpar" id="delete_notas_disciplina_id" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
-                    <button type="submit" class="warning">Limpar Notas</button>
+                    <select name="disciplina_id_para_limpar" id="delete_notas_disciplina_id" required>
+                        <option value="">Selecione uma disciplina...</option>
+                        {disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}
+                    </select>
+                    <div class="info-box"> Esta ação não pode ser desfeita!</div>
+                    <button type="submit" class="warning">Limpar Todas as Notas</button>
                 </form>
             </div>
             
             <div class="admin-card danger">
                 <h3>Remover Matrícula</h3>
                 <p style="font-size: 0.9em; color: #666; margin-top: 0;">Remove um aluno de uma turma/disciplina. Pode falhar se houver notas lançadas.</p>
-                <form method="POST">
-                    <input type="hidden" name="action" value="delete_matricula">
-                    <label for="delete_matricula_id">ID da Matrícula:</label>
-                    <input type="number" id="delete_matricula_id" name="matricula_id" required>
-                    <div class="info-box">Ação permanente. Use com cuidado.</div>
-                    <button type="submit" class="danger">Excluir Matrícula</button>
-                </form>
+                <div style="margin-bottom: 15px;">
+                    <label for="busca_aluno_id">Aluno:</label>
+                    <select id="busca_aluno_id" style="width: 100%; margin-bottom: 10px;">
+                        <option value="">Selecione um aluno...</option>
+                        {alunos_options if alunos_options else '<option>Nenhum aluno disponível</option>'}
+                    </select>
+                    <label for="busca_turma_id">Turma:</label>
+                    <select id="busca_turma_id" style="width: 100%; margin-bottom: 10px;">
+                        <option value="">Selecione uma turma...</option>
+                        {turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}
+                    </select>
+                    <label for="busca_disciplina_id">Disciplina:</label>
+                    <select id="busca_disciplina_id" style="width: 100%; margin-bottom: 10px;">
+                        <option value="">Selecione uma disciplina...</option>
+                        {disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}
+                    </select>
+                    <button type="button" onclick="buscarMatricula()" class="primary" style="width: 100%; margin-top: 10px;">
+                         Buscar Matrícula
+                    </button>
+                    <div id="resultado_matricula"></div>
+                </div>
+                <div class="info-box">
+                     Dica: Selecione aluno, turma e disciplina para encontrar a matrícula automaticamente.
+                </div>
             </div>
             
-            <div class="admin-card danger">
-                <h3>Excluir Disciplina (Permanente)</h3>
-                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Exclui a disciplina de TODO o sistema. Só funciona se nenhuma turma ou matrícula depender dela.</p>
-                <form method="POST">
+            <div class="admin-card danger" style="grid-column: 1 / -1;">
+                <h3> Assistente de Exclusão de Disciplina</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Siga os passos na ordem correta para excluir uma disciplina do sistema de forma segura.</p>
+                
+                <div style="margin-bottom: 20px;">
+                    <label for="assistente_disciplina_id">Selecione a Disciplina:</label>
+                    <select name="disciplina_id" id="assistente_disciplina_id" onchange="verificarStatusExclusao(this.value)" style="width: 100%;">
+                        <option value="">Selecione uma disciplina...</option>
+                        {disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}
+                    </select>
+                </div>
+                
+                <div id="status_exclusao" style="display: none;">
+                    <div class="exclusao-checklist">
+                        <div class="checklist-item" id="step1">
+                            <div class="step-header">
+                                <span class="step-number">1</span>
+                                <span class="step-title">Limpar Todas as Notas</span>
+                                <span class="step-status" id="status1">Pendente</span>
+                            </div>
+                            <div class="step-details" id="details1">
+                                <p>Verificando notas...</p>
+                            </div>
+                            <button type="button" class="step-btn" id="btn1" onclick="executarEtapa(1)" disabled>Executar</button>
+                        </div>
+                        
+                        <div class="checklist-item" id="step2">
+                            <div class="step-header">
+                                <span class="step-number">2</span>
+                                <span class="step-title">Verificar/Remover Matrículas</span>
+                                <span class="step-status" id="status2">Aguardando etapa 1</span>
+                            </div>
+                            <div class="step-details" id="details2">
+                                <p>Aguardando...</p>
+                            </div>
+                            <button type="button" class="step-btn" id="btn2" onclick="executarEtapa(2)" disabled>Verificar</button>
+                        </div>
+                        
+                        <div class="checklist-item" id="step3">
+                            <div class="step-header">
+                                <span class="step-number">3</span>
+                                <span class="step-title">Desassociar de Todas as Turmas</span>
+                                <span class="step-status" id="status3">Aguardando etapas anteriores</span>
+                            </div>
+                            <div class="step-details" id="details3">
+                                <p>Aguardando...</p>
+                            </div>
+                            <button type="button" class="step-btn" id="btn3" onclick="executarEtapa(3)" disabled>Executar</button>
+                        </div>
+                        
+                        <div class="checklist-item final" id="step4">
+                            <div class="step-header">
+                                <span class="step-number">4</span>
+                                <span class="step-title">Excluir Disciplina Permanentemente</span>
+                                <span class="step-status" id="status4"> Aguardando todas as etapas</span>
+                            </div>
+                            <div class="step-details" id="details4">
+                                <p>Aguardando conclusão das etapas anteriores...</p>
+                            </div>
+                            <form method="POST" id="form_excluir_final" onsubmit="return confirm(' ÚLTIMA CONFIRMAÇÃO!\\n\\nTem ABSOLUTA certeza que deseja excluir esta disciplina permanentemente?\\n\\nEsta ação é IRREVERSÍVEL!')">
                     <input type="hidden" name="action" value="delete_disciplina">
-                    <label for="delete_disciplina_id">Disciplina a Excluir:</label>
-                    <select name="disciplina_id" id="delete_disciplina_id" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
-                    <div class="info-box">Ação PERMANENTE e IRREVERSÍVEL!</div>
-                    <button type="submit" class="danger">EXCLUIR PERMANENTEMENTE</button>
+                                <input type="hidden" name="disciplina_id" id="final_disciplina_id" value="">
+                                <button type="submit" class="step-btn danger" id="btn4" disabled> EXCLUIR PERMANENTEMENTE</button>
                 </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <style>
+                .exclusao-checklist {{
+                    margin-top: 20px;
+                }}
+                .checklist-item {{
+                    background: #f8f9fa;
+                    border-left: 4px solid #6c757d;
+                    padding: 20px;
+                    margin-bottom: 15px;
+                    border-radius: 8px;
+                    transition: all 0.3s;
+                }}
+                .checklist-item.completed {{
+                    background: #d4edda;
+                    border-left-color: #28a745;
+                }}
+                .checklist-item.active {{
+                    background: #fff3cd;
+                    border-left-color: #ffc107;
+                }}
+                .checklist-item.blocked {{
+                    opacity: 0.6;
+                    background: #e9ecef;
+                }}
+                .checklist-item.final {{
+                    background: #ffebee;
+                    border-left-color: #d32f2f;
+                }}
+                .checklist-item.final.completed {{
+                    background: #ffcdd2;
+                }}
+                .step-header {{
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                    margin-bottom: 10px;
+                }}
+                .step-number {{
+                    width: 35px;
+                    height: 35px;
+                    border-radius: 50%;
+                    background: #6c757d;
+                    color: white;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: bold;
+                    font-size: 1.1rem;
+                }}
+                .checklist-item.completed .step-number {{
+                    background: #28a745;
+                }}
+                .checklist-item.active .step-number {{
+                    background: #ffc107;
+                    color: #000;
+                }}
+                .step-title {{
+                    flex: 1;
+                    font-weight: 600;
+                    font-size: 1.1rem;
+                }}
+                .step-status {{
+                    padding: 5px 12px;
+                    border-radius: 15px;
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                    background: #e9ecef;
+                    color: #6c757d;
+                }}
+                .checklist-item.completed .step-status {{
+                    background: #d4edda;
+                    color: #155724;
+                }}
+                .checklist-item.active .step-status {{
+                    background: #fff3cd;
+                    color: #856404;
+                }}
+                .step-details {{
+                    margin: 10px 0 15px 50px;
+                    padding: 10px;
+                    background: white;
+                    border-radius: 6px;
+                    font-size: 0.9rem;
+                    color: #555;
+                }}
+                .step-btn {{
+                    margin-left: 50px;
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    background: #6c757d;
+                    color: white;
+                    transition: all 0.3s;
+                }}
+                .step-btn:hover:not(:disabled) {{
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                }}
+                .step-btn:disabled {{
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }}
+                .step-btn.enabled {{
+                    background: #28a745;
+                }}
+                .step-btn.warning {{
+                    background: #ffc107;
+                    color: #000;
+                }}
+                .step-btn.danger.enabled {{
+                    background: #d32f2f;
+                    color: white;
+                }}
+                </style>
+                
+                <script>
+                let disciplinaSelecionada = null;
+                let statusEtapas = {{1: false, 2: false, 3: false, 4: false}};
+                
+                function verificarStatusExclusao(disciplinaId) {{
+                    if (!disciplinaId) {{
+                        document.getElementById('status_exclusao').style.display = 'none';
+                        return;
+                    }}
+                    
+                    disciplinaSelecionada = disciplinaId;
+                    document.getElementById('final_disciplina_id').value = disciplinaId;
+                    document.getElementById('status_exclusao').style.display = 'block';
+                    
+                    // Reset estados
+                    statusEtapas = {{1: false, 2: false, 3: false, 4: false}};
+                    resetarEtapas();
+                    
+                    // Verifica status da disciplina
+                    verificarEtapa1(disciplinaId);
+                }}
+                
+                function resetarEtapas() {{
+                    for (let i = 1; i <= 4; i++) {{
+                        document.getElementById(`step${{i}}`).classList.remove('completed', 'active', 'blocked');
+                        document.getElementById(`status${{i}}`).textContent = i === 1 ? ' Verificando...' : ' Aguardando';
+                        document.getElementById(`btn${{i}}`).disabled = true;
+                    }}
+                }}
+                
+                function verificarEtapa1(disciplinaId) {{
+                    // Tenta fazer um DELETE para verificar se há notas (404 = sem notas, 200 = há notas)
+                    // Mas melhor: tenta buscar notas através de uma query indireta
+                    // Como não há rota GET direta, vamos tentar uma abordagem diferente:
+                    // Buscar todas as turmas e verificar se há notas em alguma delas
+                    
+                    fetch(`${{apiBaseUrl}}/academico/turmas`, {{
+                        headers: {{'Authorization': 'Bearer ' + getToken()}}
+                    }})
+                    .then(res => res.json())
+                    .then(data => {{
+                        const turmas = data.turmas || [];
+                        let verificacoes = 0;
+                        let temNotas = false;
+                        
+                        if (turmas.length === 0) {{
+                            document.getElementById('details1').innerHTML = '<p> Nenhuma turma encontrada. Nenhuma nota.</p>';
+                            marcarEtapaComoConcluida(1, 'Sem notas');
+                            verificarEtapa2(disciplinaId);
+                            return;
+                        }}
+                        
+                        // Verifica se há notas em alguma turma/disciplina
+                        turmas.forEach(turma => {{
+                            // Tenta buscar alunos (se conseguir, pode ter notas)
+                            fetch(`${{apiBaseUrl}}/academico/turmas/${{turma.turma_id}}/disciplinas/${{disciplinaId}}/alunos`, {{
+                                headers: {{'Authorization': 'Bearer ' + getToken()}}
+                            }})
+                            .then(res => {{
+                                verificacoes++;
+                                if (res.status === 200) {{
+                                    return res.json().then(alunosData => {{
+                                        const alunos = alunosData.alunos || [];
+                                        // Se algum aluno tiver notas (nota_np1, nota_np2, etc.), tem notas
+                                        alunos.forEach(aluno => {{
+                                            if (aluno.nota_np1 || aluno.nota_np2 || aluno.nota_exame) {{
+                                                temNotas = true;
+                                            }}
+                                        }});
+                                        
+                                        if (verificacoes === turmas.length) {{
+                                            if (temNotas) {{
+                                                document.getElementById('details1').innerHTML = '<p><strong>Notas encontradas.</strong> Precisa limpar antes de excluir.</p>';
+                                                habilitarEtapa(1);
+                                            }} else {{
+                                                document.getElementById('details1').innerHTML = '<p> Nenhuma nota encontrada.</p>';
+                                                marcarEtapaComoConcluida(1, 'Sem notas');
+                                                verificarEtapa2(disciplinaId);
+                                            }}
+                                        }}
+                                    }});
+                                }} else {{
+                                    // Turma não tem essa disciplina ou não há alunos
+                                    if (verificacoes === turmas.length && !temNotas) {{
+                                        document.getElementById('details1').innerHTML = '<p> Nenhuma nota encontrada.</p>';
+                                        marcarEtapaComoConcluida(1, 'Sem notas');
+                                        verificarEtapa2(disciplinaId);
+                                    }}
+                                }}
+                            }})
+                            .catch(() => {{
+                                verificacoes++;
+                                if (verificacoes === turmas.length && !temNotas) {{
+                                    document.getElementById('details1').innerHTML = '<p> Nenhuma nota encontrada.</p>';
+                                    marcarEtapaComoConcluida(1, 'Sem notas');
+                                    verificarEtapa2(disciplinaId);
+                                }}
+                            }});
+                        }});
+                    }})
+                    .catch(err => {{
+                        console.error('Erro:', err);
+                        // Em caso de erro, permite tentar limpar notas manualmente
+                        document.getElementById('details1').innerHTML = '<p>Clique em "Executar" para limpar as notas (se houver).</p>';
+                        habilitarEtapa(1);
+                    }});
+                }}
+                
+                function verificarEtapa2(disciplinaId) {{
+                    // Busca matrículas verificando em todas as turmas
+                    fetch(`${{apiBaseUrl}}/academico/disciplinas/${{disciplinaId}}`, {{
+                        headers: {{'Authorization': 'Bearer ' + getToken()}}
+                    }})
+                    .then(res => res.json())
+                    .then(data => {{
+                        // Tenta verificar se há matrículas através de uma busca
+                        document.getElementById('details2').innerHTML = '<p>Clique em "Verificar" para buscar matrículas.</p>';
+                        habilitarEtapa(2);
+                    }})
+                    .catch(err => {{
+                        document.getElementById('details2').innerHTML = '<p>Clique em "Verificar" para buscar matrículas.</p>';
+                        habilitarEtapa(2);
+                    }});
+                }}
+                
+                function executarEtapa(numero) {{
+                    if (!disciplinaSelecionada) return;
+                    
+                    const disciplinaId = disciplinaSelecionada;
+                    
+                    if (numero === 1) {{
+                        // Limpar notas
+                        if (!confirm('Tem certeza que deseja excluir TODAS as notas desta disciplina? Esta ação não pode ser desfeita!')) {{
+                            return;
+                        }}
+                        
+                        document.getElementById(`step${{numero}}`).classList.add('active');
+                        document.getElementById(`status${{numero}}`).textContent = ' Executando...';
+                        
+                        fetch(`${{apiBaseUrl}}/academico/disciplinas/${{disciplinaId}}/notas`, {{
+                            method: 'DELETE',
+                            headers: {{'Authorization': 'Bearer ' + getToken()}}
+                        }})
+                        .then(res => {{
+                            if (res.status === 200) {{
+                                return res.json().then(data => {{
+                                    marcarEtapaComoConcluida(1, 'Notas excluídas com sucesso');
+                                    habilitarEtapa(2);
+                                    verificarEtapa2(disciplinaId);
+                                    return data;
+                                }});
+                            }} else {{
+                                return res.json().then(data => {{
+                                    document.getElementById('details1').innerHTML = `<p style="color: #d32f2f;">Erro: ${{data.message || 'Erro ao excluir notas'}}</p>`;
+                                    throw new Error(data.message || 'Erro ao excluir notas');
+                                }});
+                            }}
+                        }})
+                        .catch(err => {{
+                            document.getElementById('details1').innerHTML = '<p style="color: #d32f2f;">Erro ao executar.</p>';
+                        }});
+                    }} else if (numero === 2) {{
+                        // Verificar matrículas
+                        document.getElementById(`step${{numero}}`).classList.add('active');
+                        document.getElementById(`status${{numero}}`).textContent = '🔄 Verificando...';
+                        document.getElementById('details2').innerHTML = '<p>Buscando matrículas...</p>';
+                        
+                        // Como não há rota direta, verificamos tentando buscar alunos
+                        // Se conseguirmos listar turmas, verificamos se há matrículas
+                        fetch(`${{apiBaseUrl}}/academico/turmas`, {{
+                            headers: {{'Authorization': 'Bearer ' + getToken()}}
+                        }})
+                        .then(res => res.json())
+                        .then(data => {{
+                            const turmas = data.turmas || [];
+                            let totalMatriculas = 0;
+                            let verificacoes = 0;
+                            
+                            if (turmas.length === 0) {{
+                                document.getElementById('details2').innerHTML = '<p> Nenhuma turma encontrada. Nenhuma matrícula.</p>';
+                                marcarEtapaComoConcluida(2, 'Sem matrículas');
+                                habilitarEtapa(3);
+                                return;
+                            }}
+                            
+                            turmas.forEach(turma => {{
+                                fetch(`${{apiBaseUrl}}/academico/turmas/${{turma.turma_id}}/disciplinas/${{disciplinaId}}/alunos`, {{
+                                    headers: {{'Authorization': 'Bearer ' + getToken()}}
+                                }})
+                                .then(res => {{
+                                    if (res.status === 200) {{
+                                        return res.json();
+                                    }}
+                                    return {{alunos: []}};
+                                }})
+                                .then(data => {{
+                                    verificacoes++;
+                                    const alunos = data.alunos || [];
+                                    totalMatriculas += alunos.length;
+                                    
+                                    if (verificacoes === turmas.length) {{
+                                        if (totalMatriculas === 0) {{
+                                            document.getElementById('details2').innerHTML = '<p> Nenhuma matrícula encontrada.</p>';
+                                            marcarEtapaComoConcluida(2, 'Sem matrículas');
+                                            habilitarEtapa(3);
+                                        }} else {{
+                                            document.getElementById('details2').innerHTML = `<p style="color: #856404;"><strong>${{totalMatriculas}}</strong> matrícula(s) encontrada(s).<br>Você precisa remover todas as matrículas manualmente antes de continuar.</p>`;
+                                            document.getElementById('status2').textContent = ' Requer ação manual';
+                                        }}
+                                    }}
+                                }})
+                                .catch(() => {{
+                                    verificacoes++;
+                                    if (verificacoes === turmas.length && totalMatriculas === 0) {{
+                                        document.getElementById('details2').innerHTML = '<p> Nenhuma matrícula encontrada.</p>';
+                                        marcarEtapaComoConcluida(2, 'Sem matrículas');
+                                        habilitarEtapa(3);
+                                    }}
+                                }});
+                            }});
+                        }})
+                        .catch(err => {{
+                            document.getElementById('details2').innerHTML = '<p style="color: #d32f2f;">Erro ao verificar. Tente novamente.</p>';
+                        }});
+                    }} else if (numero === 3) {{
+                        // Desassociar de turmas
+                        if (!confirm('Tem certeza que deseja desassociar esta disciplina de TODAS as turmas?')) {{
+                            return;
+                        }}
+                        
+                        document.getElementById(`step${{numero}}`).classList.add('active');
+                        document.getElementById(`status${{numero}}`).textContent = ' Executando...';
+                        
+                        // Busca todas as turmas e desassocia
+                        fetch(`${{apiBaseUrl}}/academico/turmas`, {{
+                            headers: {{'Authorization': 'Bearer ' + getToken()}}
+                        }})
+                        .then(res => res.json())
+                        .then(data => {{
+                            const turmas = data.turmas || [];
+                            if (turmas.length === 0) {{
+                                document.getElementById('details3').innerHTML = '<p> Nenhuma turma associada.</p>';
+                                marcarEtapaComoConcluida(3, 'Nenhuma associação');
+                                habilitarEtapa(4);
+                                return;
+                            }}
+                            
+                            let desassociacoes = 0;
+                            let total = turmas.length;
+                            
+                            turmas.forEach(turma => {{
+                                fetch(`${{apiBaseUrl}}/academico/turmas/remover-disciplina`, {{
+                                    method: 'POST',
+                                    headers: {{
+                                        'Authorization': 'Bearer ' + getToken(),
+                                        'Content-Type': 'application/json'
+                                    }},
+                                    body: JSON.stringify({{
+                                        turma_id: parseInt(turma.turma_id),
+                                        disciplina_id: parseInt(disciplinaId)
+                                    }})
+                                }})
+                                .then(res => {{
+                                    desassociacoes++;
+                                    if (desassociacoes === total) {{
+                                        document.getElementById('details3').innerHTML = `<p> Desassociação concluída.</p>`;
+                                        marcarEtapaComoConcluida(3, 'Concluído');
+                                        habilitarEtapa(4);
+                                    }}
+                                }})
+                                .catch(() => {{
+                                    desassociacoes++;
+                                    if (desassociacoes === total) {{
+                                        document.getElementById('details3').innerHTML = `<p> Processo concluído.</p>`;
+                                        marcarEtapaComoConcluida(3, 'Concluído');
+                                        habilitarEtapa(4);
+                                    }}
+                                }});
+                            }});
+                        }})
+                        .catch(err => {{
+                            document.getElementById('details3').innerHTML = '<p style="color: #d32f2f;">Erro ao executar.</p>';
+                        }});
+                    }}
+                }}
+                
+                function marcarEtapaComoConcluida(numero, mensagem) {{
+                    statusEtapas[numero] = true;
+                    const step = document.getElementById(`step${{numero}}`);
+                    step.classList.remove('active', 'blocked');
+                    step.classList.add('completed');
+                    document.getElementById(`status${{numero}}`).textContent = ` ${{mensagem}}`;
+                    document.getElementById(`btn${{numero}}`).disabled = true;
+                    
+                    // Se não for a última etapa, habilita a próxima
+                    if (numero < 4) {{
+                        habilitarEtapa(numero + 1);
+                    }} else {{
+                        // Se for a última etapa, verifica se todas estão concluídas
+                        verificarSePodeExcluir();
+                    }}
+                }}
+                
+                function verificarSePodeExcluir() {{
+                    if (statusEtapas[1] && statusEtapas[2] && statusEtapas[3]) {{
+                        const btn4 = document.getElementById('btn4');
+                        btn4.disabled = false;
+                        btn4.classList.add('enabled');
+                        document.getElementById('status4').textContent = ' Pronto para excluir';
+                        document.getElementById('details4').innerHTML = '<p style="color: #d32f2f;"><strong>Todas as etapas concluídas!</strong><br>Você pode excluir a disciplina permanentemente.</p>';
+                    }}
+                }}
+                
+                function habilitarEtapa(numero) {{
+                    if (numero > 1 && !statusEtapas[numero - 1]) {{
+                        return; // Só habilita se a etapa anterior estiver concluída
+                    }}
+                    
+                    const step = document.getElementById(`step${{numero}}`);
+                    step.classList.remove('blocked');
+                    step.classList.add('active');
+                    document.getElementById(`btn${{numero}}`).disabled = false;
+                    document.getElementById(`btn${{numero}}`).classList.add('enabled');
+                    
+                    if (numero === 2) {{
+                        document.getElementById(`btn${{numero}}`).classList.add('warning');
+                    }}
+                    
+                    // Verifica se pode habilitar etapa 4
+                    if (numero === 3) {{
+                        verificarSePodeExcluir();
+                    }}
+                }}
+                </script>
             </div>
         </div>
     </div>
     """
     
-    # === SEÇÃO 5: LISTAS DE REFERÊNCIA ===
+    # === SEÇÃO 5: VISÃO GERAL DO SISTEMA ===
+    # Busca estrutura completa: turmas -> disciplinas -> alunos
+    estrutura_completa = buscar_estrutura_completa(token)
+    secao_visao_geral = construir_visao_geral_html(estrutura_completa)
+    
+    # === SEÇÃO 6: LISTAS DE REFERÊNCIA ===
     # Tabela de Professores
     tabela_professores_html = """
     <div class="admin-table-section">
@@ -967,6 +1679,7 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls):
     {admin_css}
     <h1>Painel do Administrador</h1>
     {feedback_html}
+    {secao_visao_geral}
     {secao_criacao}
     {secao_gestao_turmas}
     {secao_matriculas}
@@ -1129,7 +1842,7 @@ def painel_admin():
     feedback_msg = request.args.get('msg')
     feedback_cls = request.args.get('cls')
     
-    conteudo_admin_html = render_admin_content(user_type, recursos, feedback_msg, feedback_cls)
+    conteudo_admin_html = render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token)
     
     return render_base(conteudo_admin_html, "Painel do Administrador")
 # --- Função auxiliar para buscar dados (DEVE SER CRIADA NO SEU CÓDIGO) ---
@@ -1260,7 +1973,7 @@ def process_admin_action(action, form_data, token):
                 traceback.print_exc()
                 return {"msg": f"Erro ao processar: {str(e)}", "cls": "error"}
         
-        # ⚠️ (FUTURO) Caso para Associar Disciplinas
+    # (FUTURO) Caso para Associar Disciplinas
         elif action == 'assign_disciplinas':
             # 1. Obter os dados brutos
             turma_id_str = form_data.get('turma_id_disciplina')
@@ -1284,18 +1997,18 @@ def process_admin_action(action, form_data, token):
             method = requests.post
             # success_msg não é mais necessário aqui, pegaremos da API
 
-            # 🔥 DEBUG LOGS (Manter por enquanto) 🔥
+            # DEBUG LOGS (Manter por enquanto)
             print(f"\n--- [Flask POST Debug - Assign Disciplinas] ---")
             print(f"URL Alvo: {url}")
             print(f"Payload Enviado: {payload}")
             print(f"Token (primeiros 10 chars): Bearer {token[:10]}...")
             print(f"---------------------------------------------\n")
             
-            # --- 👇 CÓDIGO FALTANTE: EXECUTAR A REQUISIÇÃO E PROCESSAR RESPOSTA 👇 ---
+            # --- CÓDIGO FALTANTE: EXECUTAR A REQUISIÇÃO E PROCESSAR RESPOSTA ---
             try:
                 response = method(url, json=payload, headers={"Authorization": f"Bearer {token}"})
                 
-                # 🔥 LOG ANTES DO JSON PARSE 🔥
+                # LOG ANTES DO JSON PARSE
                 print(f"[Flask POST Debug] Status Recebido: {response.status_code}")
                 print(f"[Flask POST Debug] Texto da Resposta Bruta: '{response.text}'") # Loga o texto
 
@@ -1370,7 +2083,7 @@ def process_admin_action(action, form_data, token):
             method = requests.post # Usando POST como definido na API (para formulário HTML)
             success_msg = "Disciplina desassociada da turma com sucesso!"
 
-        # 🔥 BLOCO FALTANTE 2: Excluir Disciplina (Global) 🔥
+    # BLOCO FALTANTE 2: Excluir Disciplina (Global)
         elif action == 'delete_disciplina':
             try:
                 disciplina_id = int(form_data.get('disciplina_id'))
@@ -1439,6 +2152,469 @@ def process_admin_action(action, form_data, token):
         print(f"[ADMIN POST - Exception] Erro: {e}") 
         return {"msg": f"Erro inesperado no processamento: {e}", "cls": "error"}
 
+# --- AUXILIAR: BUSCAR ESTRUTURA COMPLETA DO SISTEMA ---
+def buscar_estrutura_completa(token):
+    """Busca a estrutura completa: turmas, disciplinas por turma, alunos por turma/disciplina."""
+    headers = {"Authorization": f"Bearer {token}"}
+    estrutura = {}
+    
+    try:
+        # Busca todas as turmas
+        turmas_res = requests.get(f"{API_BASE_URL}/academico/turmas", headers=headers, timeout=5)
+        if turmas_res.status_code == 200:
+            turmas = turmas_res.json().get('turmas', [])
+        else:
+            print(f"[buscar_estrutura_completa] Erro ao buscar turmas: {turmas_res.status_code}")
+            return estrutura
+            
+        if not turmas:
+            print("[buscar_estrutura_completa] Nenhuma turma encontrada")
+            return estrutura
+            
+        # Busca todas as disciplinas uma vez (para otimizar)
+        todas_disciplinas = []
+        try:
+            todas_disc_res = requests.get(f"{API_BASE_URL}/academico/disciplinas", headers=headers, timeout=5)
+            if todas_disc_res.status_code == 200:
+                todas_disciplinas = todas_disc_res.json().get('disciplinas', [])
+        except Exception as e:
+            print(f"[buscar_estrutura_completa] Erro ao buscar todas as disciplinas: {e}")
+        
+        # Busca todos os professores uma vez (para otimizar)
+        professores_dict = {}
+        try:
+            prof_res = requests.get(f"{API_BASE_URL}/academico/professores", headers=headers, timeout=5)
+            if prof_res.status_code == 200:
+                professores = prof_res.json().get('professores', [])
+                professores_dict = {p.get('id_usuario'): p for p in professores}
+        except Exception as e:
+            print(f"[buscar_estrutura_completa] Erro ao buscar professores: {e}")
+            
+        for turma in turmas:
+                turma_id = turma['turma_id']
+                professor_id_turma = turma.get('professor_id')
+                professor_turma_info = professores_dict.get(professor_id_turma) if professor_id_turma else None
+                
+                estrutura[turma_id] = {
+                    'info': turma,
+                    'professor_turma': professor_turma_info,  # Professor responsável pela turma
+                    'disciplinas': {},
+                    'alunos_por_turma': []
+                }
+                
+                # Busca disciplinas desta turma
+                # Estratégia: para cada disciplina, tenta buscar alunos na turma
+                # Se a chamada for bem-sucedida (mesmo sem alunos), a disciplina está associada à turma
+                disciplinas_encontradas = {}
+                
+                # Para cada disciplina disponível, verifica se está na turma
+                for disc in todas_disciplinas:
+                    disciplina_id = disc.get('disciplina_id')
+                    if not disciplina_id:
+                        continue
+                    
+                    try:
+                        # Tenta buscar alunos desta turma/disciplina
+                        # Se retornar 200, a disciplina está na turma (mesmo sem alunos)
+                        alunos_res = requests.get(
+                            f"{API_BASE_URL}/academico/turmas/{turma_id}/disciplinas/{disciplina_id}/alunos",
+                            headers=headers,
+                            timeout=3  # Timeout curto
+                        )
+                        
+                        # Se a chamada foi bem-sucedida, a disciplina está na turma
+                        if alunos_res.status_code == 200:
+                            alunos = alunos_res.json().get('alunos', [])
+                            
+                            # Por enquanto, usa o professor da turma como professor da disciplina
+                            # (Futuramente pode buscar professor_id específico de turma_disciplinas)
+                            professor_disc_info = professor_turma_info
+                            
+                            disciplinas_encontradas[disciplina_id] = {
+                                'info': disc,
+                                'alunos': alunos,
+                                'professor': professor_disc_info
+                            }
+                    except requests.exceptions.Timeout:
+                        # Timeout - disciplina provavelmente não está na turma
+                        continue
+                    except requests.exceptions.RequestException as e:
+                        # 404 ou outro erro HTTP - disciplina não está na turma
+                        continue
+                    except Exception as e:
+                        # Outro tipo de erro
+                        print(f"[buscar_estrutura_completa] Erro ao buscar alunos para turma {turma_id}, disciplina {disciplina_id}: {e}")
+                        continue
+                
+                # Armazena as disciplinas encontradas
+                estrutura[turma_id]['disciplinas'] = disciplinas_encontradas
+                
+                # Busca todos os alunos da turma (agrupado de todas as disciplinas)
+                try:
+                    # Coleta alunos únicos de todas as disciplinas
+                    alunos_turma = set()
+                    for disc_id, disc_data in estrutura[turma_id]['disciplinas'].items():
+                        for aluno in disc_data['alunos']:
+                            alunos_turma.add((aluno.get('aluno_id'), aluno.get('nome', ''), aluno.get('sobrenome', '')))
+                    estrutura[turma_id]['alunos_por_turma'] = list(alunos_turma)
+                except:
+                    pass
+                    
+    except Exception as e:
+        print(f"[buscar_estrutura_completa] Erro: {e}")
+    
+    return estrutura
+
+def construir_visao_geral_html(estrutura):
+    """Constrói HTML hierárquico para visualização da estrutura completa."""
+    
+    visao_css = """
+    <style>
+        .visao-geral-section {
+            background: #fff;
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .visao-geral-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #1b55f8;
+        }
+        .visao-geral-header h2 {
+            margin: 0;
+            color: #1b55f8;
+            font-size: 1.8rem;
+        }
+        .turma-card-overview {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        .turma-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .turma-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .turma-stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .stat-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+        .professor-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+        .professor-icon {
+            width: 20px;
+            height: 20px;
+            background: #ff9800;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.75rem;
+        }
+        .professor-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .disciplinas-container {
+            margin-top: 20px;
+        }
+        .disciplina-card {
+            background: white;
+            color: #333;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid #4CAF50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .disciplina-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .disciplina-header h4 {
+            margin: 0;
+            color: #4CAF50;
+            font-size: 1.2rem;
+        }
+        .alunos-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .aluno-badge {
+            background: #f0f0f0;
+            padding: 10px 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            transition: transform 0.2s;
+        }
+        .aluno-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .aluno-icon {
+            width: 24px;
+            height: 24px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+        .alunos-turma-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-style: italic;
+        }
+        .toggle-disciplinas {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        .toggle-disciplinas:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .collapsed {
+            display: none;
+        }
+    </style>
+    """
+    
+    html = f"""
+    {visao_css}
+    <div class="visao-geral-section">
+        <div class="visao-geral-header">
+            <h2> Visão Geral do Sistema</h2>
+            <span style="color: #666; font-size: 0.9rem;">Total de Turmas: {len(estrutura)}</span>
+        </div>
+    """
+    
+    if not estrutura:
+        html += """
+        <div class="empty-state">
+            <p>Nenhuma turma cadastrada no sistema.</p>
+        </div>
+        </div>
+        """
+        return html
+    
+    for turma_id, turma_data in estrutura.items():
+        turma_info = turma_data['info']
+        disciplinas = turma_data['disciplinas']
+        alunos_turma = turma_data.get('alunos_por_turma', [])
+        
+        nome_turma = escape(turma_info.get('nome_turma', 'Sem nome'))
+        ano = turma_info.get('ano', 'N/A')
+        professor_turma = turma_data.get('professor_turma')
+        total_disciplinas = len(disciplinas)
+        total_alunos_turma = len(alunos_turma)
+        
+        # Conta professores únicos das disciplinas
+        professores_disciplinas = set()
+        for disc_data in disciplinas.values():
+            prof_disc = disc_data.get('professor')
+            if prof_disc and prof_disc.get('id_usuario'):
+                professores_disciplinas.add((prof_disc.get('id_usuario'), prof_disc.get('email', 'N/A')))
+        
+        html += f"""
+        <div class="turma-card-overview">
+            <div class="turma-header">
+                <div>
+                    <h3>{nome_turma}</h3>
+                    <p style="margin: 5px 0 0 0; opacity: 0.9;">Ano: {ano} • ID: {turma_id}</p>
+                </div>
+            </div>
+            
+            <div class="turma-stats">
+                <div class="stat-badge">
+                    <strong>{total_disciplinas}</strong> Disciplina{'s' if total_disciplinas != 1 else ''}
+                </div>
+                <div class="stat-badge">
+                    <strong>{total_alunos_turma}</strong> Aluno{'s' if total_alunos_turma != 1 else ''} na Turma
+                </div>
+                <div class="stat-badge">
+                    <strong>{len(professores_disciplinas) if professores_disciplinas else (1 if professor_turma else 0)}</strong> Professor{'es' if (len(professores_disciplinas) if professores_disciplinas else (1 if professor_turma else 0)) != 1 else ''}
+                </div>
+            </div>
+            
+            {"<!-- Professor Responsável pela Turma -->" if professor_turma else ""}
+            {f'''
+            <div class="professor-info">
+                <strong>👨‍🏫 Professor Responsável:</strong><br>
+                <div class="professor-badge">
+                    <div class="professor-icon">P</div>
+                    <span>{escape(professor_turma.get("email", "N/A"))} (ID: {professor_turma.get("id_usuario", "N/A")})</span>
+                </div>
+            </div>
+            ''' if professor_turma else '<div class="professor-info"><em>Nenhum professor atribuído à turma</em></div>'}
+            
+            <button class="toggle-disciplinas" onclick="toggleDisciplinas('disc_{turma_id}', this)">
+                {'▼ Ver Disciplinas e Alunos' if total_disciplinas > 0 else '─ Nenhuma disciplina'}
+            </button>
+            
+            <div id="disc_{turma_id}" class="disciplinas-container" style="{'display: none;' if total_disciplinas > 0 else 'display: block;'}">
+        """
+        
+        if total_disciplinas == 0:
+            html += '<div class="empty-state"><p>Nenhuma disciplina associada a esta turma.</p></div>'
+        else:
+            for disc_id, disc_data in disciplinas.items():
+                disc_info = disc_data['info']
+                alunos_disc = disc_data['alunos']
+                professor_disc = disc_data.get('professor')
+                nome_disc = escape(disc_info.get('nome_disciplina', 'Sem nome'))
+                total_alunos_disc = len(alunos_disc)
+                
+                html += f"""
+                <div class="disciplina-card">
+                    <div class="disciplina-header">
+                        <h4> {nome_disc}</h4>
+                        <span style="color: #666; font-size: 0.9rem;">ID: {disc_id} • {total_alunos_disc} Aluno{'s' if total_alunos_disc != 1 else ''}</span>
+                    </div>
+                    
+                    {f'''
+                    <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                        <strong> Professor:</strong> {escape(professor_disc.get("email", "N/A")) if professor_disc else "Não atribuído"}
+                        {f' (ID: {professor_disc.get("id_usuario")})' if professor_disc and professor_disc.get("id_usuario") else ''}
+                    </div>
+                    ''' if professor_disc else '<div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border-radius: 6px; color: #856404;"><em>Nenhum professor atribuído a esta disciplina</em></div>'}
+                    
+                    <div class="alunos-list">
+                """
+                
+                if total_alunos_disc == 0:
+                    html += '<div class="empty-state"><p style="grid-column: 1/-1;">Nenhum aluno matriculado nesta disciplina.</p></div>'
+                else:
+                    for aluno in alunos_disc:
+                        aluno_id = aluno.get('aluno_id', 'N/A')
+                        nome = escape(aluno.get('nome', ''))
+                        sobrenome = escape(aluno.get('sobrenome', ''))
+                        nome_completo = f"{nome} {sobrenome}".strip() or f"Aluno ID: {aluno_id}"
+                        iniciais = f"{nome[0] if nome else ''}{sobrenome[0] if sobrenome else ''}".upper() or "??"
+                        
+                        html += f"""
+                        <div class="aluno-badge">
+                            <div class="aluno-icon">{iniciais[:2]}</div>
+                            <div>
+                                <strong>{nome_completo}</strong>
+                                <div style="font-size: 0.8rem; color: #666;">ID: {aluno_id}</div>
+                            </div>
+                        </div>
+                        """
+                
+                html += """
+                    </div>
+                </div>
+                """
+        
+        # Mostra lista de todos os alunos da turma (se houver)
+        if total_alunos_turma > 0:
+            html += """
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(255,255,255,0.3);">
+                <h4 style="margin-bottom: 15px; color: white;">👥 Todos os Alunos da Turma</h4>
+                <div class="alunos-turma-list">
+            """
+            for aluno_tuple in alunos_turma:
+                aluno_id, nome, sobrenome = aluno_tuple
+                nome_completo = f"{escape(nome)} {escape(sobrenome)}".strip() or f"Aluno ID: {aluno_id}"
+                iniciais = f"{nome[0] if nome else ''}{sobrenome[0] if sobrenome else ''}".upper() or "??"
+                html += f"""
+                <div class="aluno-badge" style="background: rgba(255,255,255,0.15); color: white;">
+                    <div class="aluno-icon" style="background: rgba(255,255,255,0.3);">{iniciais[:2]}</div>
+                    <div>
+                        <strong>{nome_completo}</strong>
+                        <div style="font-size: 0.8rem; opacity: 0.8;">ID: {aluno_id}</div>
+                    </div>
+                </div>
+                """
+            html += """
+                </div>
+            </div>
+            """
+        
+        html += """
+            </div>
+        </div>
+        """
+    
+    html += """
+        <script>
+        function toggleDisciplinas(id, button) {
+            const element = document.getElementById(id);
+            if (element.style.display === 'none' || element.style.display === '') {
+                element.style.display = 'block';
+                button.textContent = '▲ Ocultar Disciplinas e Alunos';
+            } else {
+                element.style.display = 'none';
+                button.textContent = '▼ Ver Disciplinas e Alunos';
+            }
+        }
+        </script>
+    </div>
+    """
+    
+    return html
+
 # --- AUXILIAR: BUSCAR RECURSOS PARA SELECTS ---
 def fetch_admin_resources(token):
     """Busca listas de turmas, disciplinas, professores e alunos."""
@@ -1457,14 +2633,14 @@ def fetch_admin_resources(token):
         if disciplinas_res.status_code == 200:
             resources['disciplinas'] = disciplinas_res.json().get('disciplinas', [])
             
-        # 🔥 Busca Professores 🔥
+    # Busca Professores
         professores_res = requests.get(f"{API_BASE_URL}/academico/professores", headers=headers)
         if professores_res.status_code == 200:
             resources['professores'] = professores_res.json().get('professores', [])
 
             
 
-        # 🔥 Busca Alunos 🔥
+    # Busca Alunos
         alunos_res = requests.get(f"{API_BASE_URL}/academico/alunos", headers=headers)
         if alunos_res.status_code == 200:
             resources['alunos'] = alunos_res.json().get('alunos', [])
@@ -1473,7 +2649,7 @@ def fetch_admin_resources(token):
     except requests.exceptions.RequestException as e:
         print(f"[FETCH RESOURCES ERROR]: {e}") 
 
-    # 👇 LOG FINAL DA FUNÇÃO 👇
+    # LOG FINAL DA FUNÇÃO
     print(f"--- [fetch_admin_resources] Retornando Recursos ---\n")
     return resources
 # ROTAS DE INTERFACE POR PERFIL
@@ -2494,6 +3670,7 @@ def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
         
         nota_np1 = aluno.get('nota_np1')
         nota_np2 = aluno.get('nota_np2')
+        nota_exame = aluno.get('nota_exame')
         media_final = aluno.get('media_final')
         
         matricula_id = aluno.get('matricula_id', '')
@@ -2509,7 +3686,11 @@ def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
                 return f'<span class="nota-badge empty">{nota}</span>'
         
         # Formata média com badge colorido
-        def formatar_media_badge(media):
+        # Lógica: Se média >= 7: aprovado direto
+        #         Se média >= 5 e existe exame: aprovado após exame
+        #         Se média >= 5 e não existe exame: recuperação (precisa fazer exame)
+        #         Se média < 5: reprovado
+        def formatar_media_badge(media, tem_exame=False):
             if media is None:
                 return '<span class="media-badge empty">N/D</span>'
             try:
@@ -2518,8 +3699,14 @@ def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
                     classe = 'aprovado'
                     texto = f'{media_float:.1f}'
                 elif media_float >= 5:
-                    classe = 'recuperacao'
-                    texto = f'{media_float:.1f}'
+                    if tem_exame:
+                        # Aprovado após exame (média >= 5 com exame)
+                        classe = 'aprovado'
+                        texto = f'{media_float:.1f}'
+                    else:
+                        # Precisa fazer exame (média entre 5 e 7, sem exame ainda)
+                        classe = 'recuperacao'
+                        texto = f'{media_float:.1f}'
                 else:
                     classe = 'reprovado'
                     texto = f'{media_float:.1f}'
@@ -2529,7 +3716,9 @@ def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
         
         nota_np1_html = formatar_nota_badge(nota_np1)
         nota_np2_html = formatar_nota_badge(nota_np2)
-        media_html = formatar_media_badge(media_final)
+        # Verifica se existe nota de exame
+        tem_exame = nota_exame is not None
+        media_html = formatar_media_badge(media_final, tem_exame=tem_exame)
         
         # Formulário de lançar nota
         form_nota_html = f"""
@@ -3064,7 +4253,7 @@ def relatorio_desempenho(turma_id, disciplina_id):
     
     return render_base(html, "Relatório de Desempenho")
 
-# ⚠️ Adicione uma rota dummy para o FORM POST (lancar_nota_form) para que os links funcionem.
+# Adicione uma rota dummy para o FORM POST (lancar_nota_form) para que os links funcionem.
 
 @app.route('/dashboard')
 @require_login

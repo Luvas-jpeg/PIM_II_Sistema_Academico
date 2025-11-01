@@ -6,7 +6,7 @@ SOURCE_FILE="algorithms.c"
 # Nome da biblioteca compartilhada a ser gerada (.so para Linux/macOS)
 OUTPUT_LIB="algorithms.so"
 
-echo "⚙️  Compilando '$SOURCE_FILE' em '$OUTPUT_LIB'..."
+echo "Compilando '$SOURCE_FILE' em '$OUTPUT_LIB'..."
 
 # Comando de compilação usando gcc
 # -fPIC: Gera código de posição independente (necessário para bibliotecas compartilhadas)
@@ -16,9 +16,9 @@ gcc -fPIC -shared "$SOURCE_FILE" -o "$OUTPUT_LIB"
 
 # Verifica se a compilação foi bem-sucedida
 if [ $? -eq 0 ]; then
-  echo "✅ Compilação concluída com sucesso! Biblioteca '$OUTPUT_LIB' criada."
+  echo "Compilação concluída com sucesso! Biblioteca '$OUTPUT_LIB' criada."
 else
-  echo "❌ Erro durante a compilação."
+  echo "Erro durante a compilação."
   exit 1 # Sai com código de erro
 fi
 

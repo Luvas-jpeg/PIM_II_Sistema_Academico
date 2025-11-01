@@ -27,7 +27,7 @@ const createTurma = async (req, res) => {
             turma: novaTurma
         });
     } catch (error) {
-        // 🔥 TRATAMENTO PARA TURMA DUPLICADA 🔥
+    // TRATAMENTO PARA TURMA DUPLICADA
         // Código 23505 no PostgreSQL indica violação de UNIQUE constraint
         if (error.code === '23505' && error.constraint === 'unique_turma_nome_ano') {
             return res.status(409).json({ // 409 Conflict
@@ -414,7 +414,7 @@ exports.assignDisciplinasToTurma = async (req, res) => {
            try {
                 const result = await client.query(insertSql, params);
                 
-                // 🔥 LOG DEPOIS DO INSERT 🔥
+                // LOG DEPOIS DO INSERT
                 console.log(`[AssignDisciplinas] RESULTADO INSERT para Disc ${disciplina_id}: RowCount=${result.rowCount}, Rows=`, result.rows);
                 
                 if (result.rowCount > 0) {
@@ -422,7 +422,7 @@ exports.assignDisciplinasToTurma = async (req, res) => {
                 } else {
                     console.log(`[AssignDisciplinas] Associação Turma ${turma_id} - Disc ${disciplina_id} JÁ EXISTIA (ON CONFLICT acionado).`);
                 } } catch (insertError) {
-                 // 🔥 LOG SE O INSERT FALHAR (mesmo com ON CONFLICT) 🔥
+                 // LOG SE O INSERT FALHAR (mesmo com ON CONFLICT)
                  console.error(`[AssignDisciplinas] ERRO NO INSERT para Disc ${disciplina_id}:`, insertError);
                  // Decide se quer continuar ou abortar a transação
                  // throw insertError; // Descomente para abortar tudo se um INSERT falhar
@@ -436,7 +436,7 @@ exports.assignDisciplinasToTurma = async (req, res) => {
         if (insercoesRealizadas > 0) {
              finalResponseMessage = `${insercoesRealizadas} nova(s) disciplina(s) associada(s) à Turma ${turma_id}.`;
         } else {
-             // 👇 MENSAGEM MAIS CLARA QUANDO NADA É INSERIDO 👇
+            // MENSAGEM MAIS CLARA QUANDO NADA É INSERIDO
              finalResponseMessage = `Nenhuma nova disciplina foi associada. As associações selecionadas provavelmente já existiam para a Turma ${turma_id}.`;
         }
         
@@ -482,7 +482,7 @@ const getProfessorTurmas = async (req, res) => {
     console.log(`[GetProfessorTurmas] Buscando turmas e disciplinas para professor_id: ${professor_id}`);
 
     try {
-        // ⚠️ CORREÇÃO SQL: Agora busca disciplinas da tabela turma_disciplinas
+    // CORREÇÃO SQL: Agora busca disciplinas da tabela turma_disciplinas
         // Considera tanto disciplinas associadas diretamente ao professor (turma_disciplinas.professor_id)
         // quanto disciplinas de turmas onde o professor é responsável (turmas.professor_id)
         const sql = `
@@ -585,7 +585,7 @@ const createDisciplina = async (req, res) => {
         const resultado = await db.query(sql, params);
         const novaDisciplina = resultado.rows[0];
 
-        // ⚠️ CORREÇÃO: "criada"
+    // CORREÇÃO: "criada"
         res.status(201).json({
             message: "Disciplina criada com sucesso!",
             disciplina: novaDisciplina
@@ -771,7 +771,7 @@ const createAlunoProfile = async (req, res) => {
 
 // Função para matricular um aluno em uma turma/disciplina
 const matricularAluno = async (req, res) => {
-    // ⚠️ CORREÇÃO: Removido erro de digitação ('professoresou')
+    // CORREÇÃO: Removido erro de digitação ('professoresou')
     if (req.user.tipo_usuario !== 'professor' && req.user.tipo_usuario !== "admin") {
         return res.status(403).json({ message: "Acesso negado, apenas professores ou administradores podem realizar essa ação" });
     }
@@ -784,15 +784,15 @@ const matricularAluno = async (req, res) => {
     }
 
     try {
-        // Verfica se o aluno existe na tabela alunos
-        const aluno = await db.query('SELECT aluno_id FROM alunos WHERE aluno_id = $1', [aluno_id]) // ⚠️ CORREÇÃO: Sintaxe $1
+    // Verfica se o aluno existe na tabela alunos
+    const aluno = await db.query('SELECT aluno_id FROM alunos WHERE aluno_id = $1', [aluno_id]) // CORREÇÃO: Sintaxe $1
         if (aluno.rows.length === 0) {
             return res.status(404).json({ message: "Aluno não encontrado" });
         }
 
-        //Verifica se a disciplina existe
-        const disciplina = await db.query('SELECT disciplina_id FROM disciplinas WHERE disciplina_id = $1', [disciplina_id]); // ⚠️ CORREÇÃO: Sintaxe $1
-        // ⚠️ CORREÇÃO: Digitação de 'encontrado'
+    //Verifica se a disciplina existe
+    const disciplina = await db.query('SELECT disciplina_id FROM disciplinas WHERE disciplina_id = $1', [disciplina_id]); // CORREÇÃO: Sintaxe $1
+    // CORREÇÃO: Digitação de 'encontrado'
         if (disciplina.rows.length === 0) {
             return res.status(404).json({ message: 'Disciplina não encontrada' }) 
         }
@@ -803,9 +803,9 @@ const matricularAluno = async (req, res) => {
         VALUES ($1, $2, $3)
         RETURNING *;
         `;
-        const params = [aluno_id, turma_id, disciplina_id]; // ⚠️ CORREÇÃO: Variável 'parametros' para 'params'
+    const params = [aluno_id, turma_id, disciplina_id]; // CORREÇÃO: Variável 'parametros' para 'params'
         
-        const resultado = await db.query(sql, params); // ⚠️ CORREÇÃO: Variável 'sql' não 'slq'
+    const resultado = await db.query(sql, params); // CORREÇÃO: Variável 'sql' não 'slq'
         const novaMatricula = resultado.rows[0];
 
         res.status(201).json({
@@ -892,18 +892,41 @@ const getAlunoBoletim = async (req, res) => {
                 (SELECT valor_nota FROM notas n_np2 
                  WHERE n_np2.aluno_id = a.aluno_id 
                    AND n_np2.disciplina_id = d.disciplina_id 
-                   AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1) AS nota_np2, 
+                   AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1) AS nota_np2,
                    
-                -- Cálculo da Média
+                -- Subconsulta Exame
+                (SELECT valor_nota FROM notas n_exame 
+                 WHERE n_exame.aluno_id = a.aluno_id 
+                   AND n_exame.disciplina_id = d.disciplina_id 
+                   AND n_exame.tipo_avaliacao = 'Exame' LIMIT 1) AS nota_exame,
+                   
+                -- Cálculo da Média Final com Exame
+                -- Se média inicial (NP1+NP2)/2 < 7 e existe exame: (média inicial + exame) / 2
+                -- Caso contrário: média inicial
                 ROUND(
-                    (
-                        COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = d.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) 
-                        + 
-                        COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = d.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)
-                    ) / 2.0, 1
+                    CASE 
+                        WHEN (
+                            (COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = d.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
+                             COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = d.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)) / 2.0 < 7
+                            AND (SELECT valor_nota FROM notas n_exame WHERE n_exame.aluno_id = a.aluno_id AND n_exame.disciplina_id = d.disciplina_id AND n_exame.tipo_avaliacao = 'Exame' LIMIT 1) IS NOT NULL
+                        ) THEN
+                            -- Nova média com exame: (média inicial + nota exame) / 2
+                            (
+                                ((COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = d.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
+                                  COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = d.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)) / 2.0)
+                                +
+                                COALESCE((SELECT valor_nota FROM notas n_exame WHERE n_exame.aluno_id = a.aluno_id AND n_exame.disciplina_id = d.disciplina_id AND n_exame.tipo_avaliacao = 'Exame' LIMIT 1), 0)
+                            ) / 2.0
+                        ELSE
+                            -- Média inicial: (NP1 + NP2) / 2
+                            (
+                                COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = d.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
+                                COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = d.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)
+                            ) / 2.0
+                    END, 1
                 ) AS media_final,
 
-                -- 🔥 SUBCONSULTA DE FALTAS CORRIGIDA 🔥
+                -- SUBCONSULTA DE FALTAS CORRIGIDA
                 (SELECT COUNT(*) 
                  FROM presenca p 
                  WHERE p.matricula_id = m.matricula_id 
@@ -1081,7 +1104,7 @@ const marcarPresenca = async (req, res) => {
         });
 
     } catch (error) {
-        // 🔥 ERRO 23505: Violação da UNIQUE constraint (Já marcou hoje!)
+    // ERRO 23505: Violação da UNIQUE constraint (Já marcou hoje!)
         if (error.code === '23505') {
              return res.status(409).json({ message: `Presença para este aluno/disciplina já foi marcada hoje (${data_atual}).` });
         }
@@ -1102,7 +1125,7 @@ const getAlunosPorTurmaDisciplina = async (req, res) => {
     const professor_id = req.user.id; // ID do professor logado (para segurança)
 
     try {
-        // ⚠️ CONSULTA SQL COM GROUP BY CORRIGIDO ⚠️
+    // CONSULTA SQL COM GROUP BY CORRIGIDO
         const sql = `
             SELECT
                 a.aluno_id, a.nome, a.sobrenome, m.matricula_id,
@@ -1119,12 +1142,37 @@ const getAlunosPorTurmaDisciplina = async (req, res) => {
                    AND n_np2.disciplina_id = m.disciplina_id 
                    AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1) AS nota_np2,
                    
-                -- Cálculo da Média
+                -- Subconsulta Exame
+                (SELECT valor_nota FROM notas n_exame 
+                 WHERE n_exame.aluno_id = a.aluno_id 
+                   AND n_exame.disciplina_id = m.disciplina_id 
+                   AND n_exame.tipo_avaliacao = 'Exame' LIMIT 1) AS nota_exame,
+                   
+                -- Cálculo da Média Final com Exame
+                -- Se média inicial (NP1+NP2)/2 < 7 e existe exame: (média inicial + exame) / 2
+                -- Caso contrário: média inicial
                 ROUND(
-                    (COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = m.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
-                     COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = m.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)) 
-                    / 2.0 
-                , 1) AS media_final
+                    CASE 
+                        WHEN (
+                            (COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = m.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
+                             COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = m.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)) / 2.0 < 7
+                            AND (SELECT valor_nota FROM notas n_exame WHERE n_exame.aluno_id = a.aluno_id AND n_exame.disciplina_id = m.disciplina_id AND n_exame.tipo_avaliacao = 'Exame' LIMIT 1) IS NOT NULL
+                        ) THEN
+                            -- Nova média com exame: (média inicial + nota exame) / 2
+                            (
+                                ((COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = m.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
+                                  COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = m.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)) / 2.0)
+                                +
+                                COALESCE((SELECT valor_nota FROM notas n_exame WHERE n_exame.aluno_id = a.aluno_id AND n_exame.disciplina_id = m.disciplina_id AND n_exame.tipo_avaliacao = 'Exame' LIMIT 1), 0)
+                            ) / 2.0
+                        ELSE
+                            -- Média inicial: (NP1 + NP2) / 2
+                            (
+                                COALESCE((SELECT valor_nota FROM notas n_np1 WHERE n_np1.aluno_id = a.aluno_id AND n_np1.disciplina_id = m.disciplina_id AND n_np1.tipo_avaliacao = 'NP1' LIMIT 1), 0) + 
+                                COALESCE((SELECT valor_nota FROM notas n_np2 WHERE n_np2.aluno_id = a.aluno_id AND n_np2.disciplina_id = m.disciplina_id AND n_np2.tipo_avaliacao = 'NP2' LIMIT 1), 0)
+                            ) / 2.0
+                    END, 1
+                ) AS media_final
             FROM 
                 matriculas m
             JOIN 
@@ -1133,7 +1181,7 @@ const getAlunosPorTurmaDisciplina = async (req, res) => {
             WHERE 
                 m.turma_id = $1 AND m.disciplina_id = $2 
             
-            -- 👇 CORREÇÃO: GROUP BY apenas nas colunas de identificação 👇
+            -- CORREÇÃO: GROUP BY apenas nas colunas de identificação
             GROUP BY
                 a.aluno_id, a.nome, a.sobrenome, m.matricula_id
             ORDER BY 
@@ -1307,23 +1355,23 @@ const assignDisciplinasToTurma = async (req, res) => {
         let finalResponseMessage = '';
         
         if (insercoesRealizadas > 0) {
-            finalResponseMessage = `✅ ${insercoesRealizadas} nova(s) disciplina(s) associada(s) à Turma ${turma_id}.`;
+            finalResponseMessage = `${insercoesRealizadas} nova(s) disciplina(s) associada(s) à Turma ${turma_id}.`;
         } else {
-            finalResponseMessage = `ℹ️ Nenhuma nova disciplina foi associada à Turma ${turma_id}.`;
+            finalResponseMessage = `Nenhuma nova disciplina foi associada à Turma ${turma_id}.`;
         }
         
         if (disciplinasJaAssociadas.length > 0) {
             const nomesJaAssociadas = disciplinasJaAssociadas.map(d => `${d.nome} (ID: ${d.id})`).join(', ');
-            finalResponseMessage += `\n⚠️ Disciplina(s) que já estavam associadas: ${nomesJaAssociadas}.`;
+            finalResponseMessage += `\nDisciplina(s) que já estavam associadas: ${nomesJaAssociadas}.`;
         }
         
         if (disciplinasInvalidas.length > 0) {
-            finalResponseMessage += `\n❌ IDs de disciplinas inválidos ignorados: ${disciplinasInvalidas.join(', ')}.`;
+            finalResponseMessage += `\nIDs de disciplinas inválidos ignorados: ${disciplinasInvalidas.join(', ')}.`;
         }
 
         // Se não houve nenhuma ação efetiva, avisa o usuário
         if (insercoesRealizadas === 0 && disciplinasJaAssociadas.length === 0 && disciplinasInvalidas.length === 0) {
-            finalResponseMessage = `⚠️ Nenhuma disciplina foi processada. Verifique se os IDs estão corretos.`;
+            finalResponseMessage = `Nenhuma disciplina foi processada. Verifique se os IDs estão corretos.`;
         }
 
         // Use a variável correta na resposta JSON
@@ -1338,7 +1386,7 @@ const assignDisciplinasToTurma = async (req, res) => {
 
     } catch (error) {
         await client.query('ROLLBACK'); 
-        // 🔥 LOG 7: Erro capturado
+    // LOG 7: Erro capturado
         console.error('[AssignDisciplinas] Erro durante a transação:', error); 
         res.status(500).json({ message: 'Erro no servidor durante a atribuição.', error: error.message });
     } finally {

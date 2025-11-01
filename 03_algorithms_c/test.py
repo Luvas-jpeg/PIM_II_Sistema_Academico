@@ -28,9 +28,9 @@ print(f"Tentando carregar a biblioteca C de: {lib_path}")
 try:
     # Carrega a biblioteca na memória
     lib_c = ctypes.CDLL(lib_path) 
-    print("✅ Biblioteca C carregada com sucesso!")
+    print("Biblioteca C carregada com sucesso!")
 except OSError as e:
-    print(f"❌ ERRO: Não foi possível carregar a biblioteca '{lib_path}'.")
+    print(f"ERRO: Não foi possível carregar a biblioteca '{lib_path}'.")
     print(f"   Verifique se o arquivo foi compilado (compile.bat ou compile.sh).")
     print(f"   Detalhe do Erro: {e}")
     exit(1)
