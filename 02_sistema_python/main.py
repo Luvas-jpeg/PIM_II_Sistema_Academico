@@ -24,7 +24,7 @@ Data: Outubro 2025
 import ctypes
 import platform
 from flask import Flask, render_template_string, request, redirect, url_for, session
-from markupsafe import escape  # Para proteção contra XSS
+from markupsafe import escape, Markup  # Para proteção contra XSS e permitir HTML seguro
 import requests  # Para comunicação com a API
 import os
 from decimal import Decimal, ROUND_HALF_UP
@@ -156,7 +156,7 @@ def render_login_base(content_html, page_title="Login"):
             .brand {{ text-align: center; margin-bottom: 18px; }}
             .brand h2 {{ margin: 0; color: var(--accent); }}
             label {{ display:block; font-size:0.9rem; color:var(--muted); margin-bottom:6px; }}
-            input[type="text"], input[type="password"] {{
+            input[type="text"], input[type="password"], input[type="email"], input[type="date"] {{
                 width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #e6e9ef;
                 margin-bottom: 14px; font-size: 1rem;
             }}
@@ -196,23 +196,27 @@ def render_register_form(error_message=None):
     error_html = f'<p class="error-message">{escape(error_message)}</p>' if error_message else ''
     form_html = f'''
     <div class="login-card"> 
-        <h2>Cadastro</h2>
+        <div class="brand">
+            <h2>Cadastro</h2>
+        </div>
         {error_html}
         <form method="POST" action="{url_for('registrar')}">
             <label for="nome">Nome:</label>
-            <input type="text" name="nome" required>
+            <input type="text" name="nome" id="nome" required>
             <label for="sobrenome">Sobrenome:</label>
-            <input type="text" name="sobrenome">
+            <input type="text" name="sobrenome" id="sobrenome">
             <label for="email">E-mail:</label>
-            <input type="email" name="email" required>
+            <input type="email" name="email" id="email" required>
             <label for="senha">Senha:</label>
-            <input type="password" name="senha" required>
+            <input type="password" name="senha" id="senha" required>
             <label for="data_nascimento">Data Nascimento (AAAA-MM-DD):</label>
-            <input type="date" name="data_nascimento"> 
+            <input type="date" name="data_nascimento" id="data_nascimento"> 
             
             <button type="submit">Registrar Aluno</button>
         </form>
-        <p style="text-align: center; margin-top: 15px;">Já tem conta? <a href="{url_for('login')}">Faça Login</a></p>
+        <div class="help">
+            <p>Já tem conta? <a href="{url_for('login')}" style="color: var(--accent); text-decoration: none;">Faça Login</a></p>
+        </div>
     </div>
     '''
     # Use o render_login_base (sem sidebar)
@@ -223,26 +227,28 @@ def render_login_form(error_message=None):
     error_html = f'<p class="error-message" style="color:#d32f2f;text-align:center;font-size:0.9rem;">{escape(error_message)}</p>' if error_message else ''
     
     form_html = f'''
-    <div class="login-card" style="max-width: 420px; margin: auto; padding: 28px; border: 1px solid #ddd; border-radius: 12px;">
-        <div style="text-align:center;"><h2>Login</h2></div>
+    <div class="login-card">
+        <div class="brand">
+            <h2>Login</h2>
+        </div>
         {error_html}
         <form method="POST" action="{url_for('login')}">
             <label for="usuario">E-mail:</label>
-            <input id="usuario" type="text" name="usuario" required style="width: 100%; margin-bottom: 10px;">
+            <input id="usuario" type="text" name="usuario" required>
             <label for="senha">Senha:</label>
-            <input id="senha" type="password" name="senha" required style="width: 100%; margin-bottom: 15px;">
-            <button type="submit" style="background: #1b55f8; color: white; padding: 10px; border: none; width: 100%; border-radius: 4px; cursor: pointer;">Entrar</button>
+            <input id="senha" type="password" name="senha" required>
+            <button type="submit">Entrar</button>
         </form>
         
-        <div style="text-align: center; margin-top: 15px;">
+        <div class="help">
             <p>Não tem uma conta? 
                <a href="{url_for('registrar')}" style="color: var(--accent); text-decoration: none;">Registre-se aqui</a>
             </p>
         </div>
     </div>
     '''
-    # Note que esta função DEVE chamar render_base para envolver o formulário no layout de página completa
-    return render_base(form_html, "Página de Login")
+    # Usa render_login_base que já tem o CSS com a imagem de fundo
+    return render_login_base(form_html, "Login")
 
 def require_login(view_func):
     """
@@ -273,108 +279,235 @@ def require_login(view_func):
     wrapper.__name__ = view_func.__name__ 
     return wrapper
 
-def render_notas_form():
-    """
-    Gera o HTML do formulário para lançamento de notas pelos professores.
-    
-    Esta função cria um formulário com campos para:
-    - ID do Aluno
-    - ID da Disciplina
-    - Valor da Nota (0.0 a 10.0)
-    
-    O formulário é estilizado e inclui validações básicas de entrada.
-    Os dados são enviados via POST para a rota do painel do professor.
-    
-    Returns:
-        str: HTML do formulário de lançamento de notas
-    """
-    form_html = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-top: 40px;">
-        <h2>Lançamento Rápido de Notas</h2>
-        <form method="POST" action="{url_for('painel_professor')}">
-            <input type="hidden" name="action" value="lancar_nota"> 
-            
-            <label for="aluno_id" style="display:block; margin-top: 10px;">ID do Aluno:</label>
-            <input type="number" id="aluno_id" name="aluno_id" required style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
 
-            <label for="disciplina_id" style="display:block;">ID da Disciplina:</label>
-            <input type="number" id="disciplina_id" name="disciplina_id" required style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
-            
-            <label for="valor_nota" style="display:block;">Nota (0.0 a 10.0):</label>
-            <input type="number" step="0.1" min="0" max="10" id="valor_nota" name="valor_nota" required style="width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px;">
-            
-            <button type="submit" style="background: var(--accent); color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer;">
-                Lançar Nota
-            </button>
-        </form>
+def render_professor_content(user_type, turmas, message, message_class):
+    """Gera o HTML do painel do professor, incluindo cards visuais."""
+    
+    # CSS adicional para melhor apresentação
+    professor_css = """
+    <style>
+        .professor-header {
+            background: linear-gradient(135deg, #1b55f8 0%, #133fe0 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(27, 85, 248, 0.2);
+        }
+        .professor-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2rem;
+        }
+        .professor-stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 15px 20px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        .stat-card strong {
+            display: block;
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+        .stat-card span {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .turmas-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .turma-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #1b55f8;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .turma-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .turma-card-header {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .turma-card-header h3 {
+            margin: 0 0 5px 0;
+            color: #1b55f8;
+            font-size: 1.3rem;
+        }
+        .turma-card-header .ano {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .disciplina-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .disciplina-item:last-child {
+            margin-bottom: 0;
+        }
+        .disciplina-nome {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+        .disciplina-id {
+            color: #666;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+        }
+        .btn-gerenciar {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s;
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        .btn-gerenciar:hover {
+            background: #45a049;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            color: #666;
+        }
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        .feedback-box {
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        .feedback-box.success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .feedback-box.error {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+    </style>
+    """
+    
+    # Mensagens de Feedback melhoradas
+    feedback_html = ''
+    if message:
+        box_class = 'success' if message_class == 'success' else 'error'
+        feedback_html = f'<div class="feedback-box {box_class}">{escape(message)}</div>'
+    
+    # Contagem de estatísticas
+    total_turmas = len(set(t.get('turma_id') for t in turmas)) if turmas else 0
+    total_disciplinas = len(turmas) if turmas else 0
+    
+    # Header com estatísticas
+    header_html = f"""
+    <div class="professor-header">
+        <h1>Painel do Professor</h1>
+        <p style="margin: 0; opacity: 0.9;">Gerencie suas turmas e disciplinas atribuídas</p>
+        <div class="professor-stats">
+            <div class="stat-card">
+                <strong>{total_turmas}</strong>
+                <span>Turma{'s' if total_turmas != 1 else ''}</span>
+            </div>
+            <div class="stat-card">
+                <strong>{total_disciplinas}</strong>
+                <span>Disciplina{'s' if total_disciplinas != 1 else ''}</span>
+            </div>
+        </div>
     </div>
     """
-    return form_html
-
-def render_professor_content(user_type, turmas, message, message_class, notas_feedback=None):
-    """Gera o HTML do painel do professor, incluindo a tabela e o formulário."""
     
-    # Mensagens de Feedback
-    feedback_html = f'<div class="{message_class}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px;">{escape(message)}</div>' if message else ''
-    notas_feedback_html = f'<div class="{notas_feedback["cls"]}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px;">{escape(notas_feedback["msg"])}</div>' if notas_feedback else ''
-
-    # --- Tabela de Turmas Atribuídas ---
-    tabela_html = """
-    <h2 style="color: #333; margin-top: 25px;">Minhas Turmas Atribuídas</h2>
-    <table class="boletim">
-        <thead>
-            <tr><th>Turma</th><th>Disciplina</th><th>Ano</th><th>Ação</th></tr>
-        </thead>
-        <tbody>
-    """
-    
+    # Cards de Turmas e Disciplinas
     if turmas:
-        # Agrupa disciplinas por turma para melhor visualização (se a API retornar duplicatas)
+        # Agrupa disciplinas por turma
         turmas_agrupadas = {}
         for t in turmas:
             turma_id = t.get('turma_id')
             if turma_id not in turmas_agrupadas:
-                 turmas_agrupadas[turma_id] = {'nome': t.get('nome_turma'), 'ano': t.get('ano'), 'disciplinas': []}
+                 turmas_agrupadas[turma_id] = {
+                     'nome': t.get('nome_turma'), 
+                     'ano': t.get('ano'), 
+                     'disciplinas': []
+                 }
             turmas_agrupadas[turma_id]['disciplinas'].append(t)
-
+        
+        turmas_cards_html = '<div class="turmas-grid">'
+        
         for turma_id, info in turmas_agrupadas.items():
             nome_turma = escape(info['nome'])
             ano = info['ano']
             
-            # Exibe cada disciplina como uma linha separada para gestão
+            disciplinas_html = ''
             for disc_info in info['disciplinas']:
                 disciplina_id = disc_info.get('disciplina_id')
                 disciplina_nome = escape(disc_info.get('nome_disciplina', 'N/A'))
-                
-                # Link para a tela de gestão detalhada
                 gerenciar_url = url_for('gerenciar_turma', turma_id=turma_id, disciplina_id=disciplina_id) if disciplina_id else '#'
                 
-                tabela_html += f"""
-                <tr>
-                    <td>{nome_turma} (ID: {turma_id})</td>
-                    <td>{disciplina_nome} (ID: {disciplina_id})</td>
-                    <td>{ano}</td>
-                    <td>
-                        <a href='{gerenciar_url}' style='background: #4CAF50; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none;'>
-                            Gerenciar Alunos/Notas
-                        </a>
-                    </td>
-                </tr>
+                disciplinas_html += f"""
+                <div class="disciplina-item">
+                    <div class="disciplina-nome">{disciplina_nome}</div>
+                    <div class="disciplina-id">ID: {disciplina_id}</div>
+                    <a href='{gerenciar_url}' class="btn-gerenciar">
+                        Gerenciar Alunos e Notas
+                    </a>
+                </div>
                 """
-    else:
-        tabela_html += '<tr><td colspan="4">Nenhuma turma atribuída a você no momento.</td></tr>'
+            
+            turmas_cards_html += f"""
+            <div class="turma-card">
+                <div class="turma-card-header">
+                    <h3>{nome_turma}</h3>
+                    <div class="ano">Ano: {ano} • ID: {turma_id}</div>
+                </div>
+                {disciplinas_html}
+            </div>
+            """
         
-    tabela_html += '</tbody></table>'
+        turmas_cards_html += '</div>'
+    else:
+        turmas_cards_html = """
+        <div class="empty-state">
+            <h2 style="color: #666; margin-bottom: 10px;">Nenhuma turma atribuída</h2>
+            <p>Você ainda não possui turmas ou disciplinas atribuídas.</p>
+            <p style="margin-top: 10px; font-size: 0.9rem;">Entre em contato com o administrador do sistema.</p>
+        </div>
+        """
     
-    # --- Conteúdo final ---
-    form_html_notas = render_notas_form()
-    
+    # Conteúdo final
     return f"""
-    <h1>Painel do Professor ({user_type.upper()})</h1>
-    {notas_feedback_html}
+    {professor_css}
+    {header_html}
     {feedback_html}
-    {tabela_html}
-    {form_html_notas} 
+    <h2 style="color: #333; margin-top: 30px; margin-bottom: 20px;">📋 Minhas Turmas e Disciplinas</h2>
+    {turmas_cards_html}
     """
 
 def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
@@ -430,226 +563,416 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls):
     print(f"\n--- [render_admin_content] Iniciando Renderização ---")
     print(f"[render_admin_content] Número de Professores Recebidos: {len(recursos.get('professores', []))}")
     print(f"[render_admin_content] Número de Alunos Recebidos: {len(recursos.get('alunos', []))}\n")
-    # HTML de feedback (usamos render_base para estilizar isso)
-    feedback_html = f'<div class="{feedback_cls}" style="padding: 10px; margin-bottom: 20px;">{escape(feedback_msg)}</div>' if feedback_msg else ''
+    
+    # CSS adicional para melhor organização
+    admin_css = """
+    <style>
+        .admin-section { margin-bottom: 40px; }
+        .admin-section-title { 
+            font-size: 1.5rem; 
+            color: #333; 
+            margin-bottom: 20px; 
+            padding-bottom: 10px; 
+            border-bottom: 2px solid #1b55f8; 
+        }
+        .admin-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
+            gap: 20px; 
+            margin-bottom: 30px; 
+        }
+        .admin-card { 
+            background: #fff; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+            border-left: 4px solid #1b55f8;
+        }
+        .admin-card.danger { border-left-color: #d32f2f; }
+        .admin-card.warning { border-left-color: #ff9800; }
+        .admin-card h3 { 
+            margin-top: 0; 
+            color: #1b55f8; 
+            font-size: 1.2rem; 
+        }
+        .admin-card.danger h3 { color: #d32f2f; }
+        .admin-card.warning h3 { color: #ff9800; }
+        .admin-card label { 
+            display: block; 
+            margin-top: 10px; 
+            margin-bottom: 5px; 
+            font-weight: 500; 
+            color: #555; 
+        }
+        .admin-card input, .admin-card select, .admin-card textarea { 
+            width: 100%; 
+            padding: 8px 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            font-size: 0.95rem; 
+            box-sizing: border-box;
+        }
+        .admin-card button { 
+            margin-top: 15px; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            font-size: 0.95rem;
+        }
+        .admin-card button.primary { 
+            background: #1b55f8; 
+            color: white; 
+        }
+        .admin-card button.primary:hover { background: #133fe0; }
+        .admin-card button.danger { 
+            background: #d32f2f; 
+            color: white; 
+        }
+        .admin-card button.danger:hover { background: #b71c1c; }
+        .admin-card button.warning { 
+            background: #ff9800; 
+            color: white; 
+        }
+        .admin-card button.warning:hover { background: #f57c00; }
+        .info-box { 
+            background: #e3f2fd; 
+            padding: 12px; 
+            border-radius: 4px; 
+            margin-top: 10px; 
+            font-size: 0.9rem; 
+            color: #1976d2; 
+        }
+        .admin-table-section { 
+            background: #fff; 
+            padding: 25px; 
+            border-radius: 8px; 
+            margin-top: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .admin-table-section h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.4rem;
+        }
+        .admin-table-section table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .admin-table-section table thead {
+            background: linear-gradient(135deg, #1b55f8 0%, #133fe0 100%);
+            color: white;
+        }
+        .admin-table-section table th {
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .admin-table-section table tbody tr {
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.2s;
+        }
+        .admin-table-section table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        .admin-table-section table tbody tr:last-child {
+            border-bottom: none;
+        }
+        .admin-table-section table tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .admin-table-section table tbody tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+        .admin-table-section table td {
+            padding: 12px;
+            color: #333;
+            font-size: 0.95rem;
+        }
+        .admin-table-section table tbody tr td:first-child {
+            font-weight: 600;
+            color: #1b55f8;
+        }
+    </style>
+    """
+    
+    # HTML de feedback (permite <br> tags para quebras de linha)
+    if feedback_msg:
+        # Se a mensagem contém <br>, permite renderizar como HTML; caso contrário, escapa
+        if '<br>' in feedback_msg:
+            # Separa por <br>, escapa cada parte, e junta com <br>
+            partes = feedback_msg.split('<br>')
+            partes_seguras = [escape(p) for p in partes]
+            safe_msg = Markup('<br>'.join(partes_seguras))
+        else:
+            # Mensagem sem <br>, escapa normalmente
+            safe_msg = escape(feedback_msg)
+        
+        feedback_html = f'<div class="{feedback_cls}" style="padding: 12px; margin-bottom: 20px; border-radius: 4px; background: {"#d4edda" if feedback_cls == "success" else "#f8d7da"}; color: {"#155724" if feedback_cls == "success" else "#721c24"};">{safe_msg}</div>'
+    else:
+        feedback_html = ''
 
     # Cria as opções para selects (turmas e disciplinas)
     turma_options = ''.join(f'<option value="{t["turma_id"]}">{escape(t["nome_turma"])} ({t["ano"]})</option>' for t in recursos['turmas'])
     disciplina_options = ''.join(f'<option value="{d["disciplina_id"]}">{escape(d["nome_disciplina"])}</option>' for d in recursos['disciplinas'])
+    
+    # Cria lista de professores para select melhorado
+    professor_options = ''.join(f'<option value="{p.get("id_usuario")}">{escape(p.get("email", "N/A"))} (ID: {p.get("id_usuario")})</option>' for p in recursos.get('professores', []))
 
-    # --- Formulário 1: Criar Conta de Professor ---
-    form_create_prof = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-        <h2>1. Criar Conta de Professor</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="create_professor">
-            <label for="email">E-mail:</label>
-            <input type="email" name="email" required>
-            <label for="senha">Senha:</label>
-            <input type="password" name="senha" required>
-            <button type="submit">Criar Conta</button>
-        </form>
-    </div>
-    """
-    form_criarDiciplina = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-        <h2>5. Criar Nova Disciplina</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="create_disciplina"> 
+    # === SEÇÃO 1: CRIAÇÃO DE RECURSOS ===
+    secao_criacao = f"""
+    <div class="admin-section">
+        <h2 class="admin-section-title">Criar Recursos</h2>
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3>Criar Conta de Professor</h3>
+                <form method="POST">
+                    <input type="hidden" name="action" value="create_professor">
+                    <label for="email">E-mail:</label>
+                    <input type="email" name="email" id="email" required>
+                    <label for="senha">Senha:</label>
+                    <input type="password" name="senha" id="senha" required>
+                    <button type="submit" class="primary">Criar Conta</button>
+                </form>
+            </div>
             
-            <label for="nome_disciplina">Nome da Disciplina:</label>
-            <input type="text" id="nome_disciplina" name="nome_disciplina" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <div class="admin-card">
+                <h3>Criar Turma</h3>
+                <form method="POST">
+                    <input type="hidden" name="action" value="create_turma">
+                    <label for="nome_turma">Nome da Turma:</label>
+                    <input type="text" name="nome_turma" id="nome_turma" required>
+                    <label for="ano">Ano:</label>
+                    <input type="number" name="ano" id="ano" required min="2020" max="2100">
+                    <button type="submit" class="primary">Criar Turma</button>
+                </form>
+            </div>
             
-            <label for="descricao_disciplina">Descrição (Opcional):</label>
-            <textarea id="descricao_disciplina" name="descricao" rows="3" style="width: 100%; padding: 8px; margin-bottom: 15px;"></textarea>
-            
-            <button type="submit">Criar Disciplina</button>
-        </form>
-    </div>
-    """
-
-
-    # --- Formulário 2: Criar Turma ---
-    form_turma = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-        <h2>2. Criar Turma</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="create_turma">
-            <label for="nome_turma">Nome da Turma:</label>
-            <input type="text" name="nome_turma" required>
-            <label for="ano">Ano:</label>
-            <input type="number" name="ano" required>
-            <button type="submit">Criar Turma</button>
-        </form>
+            <div class="admin-card">
+                <h3>Criar Disciplina</h3>
+                <form method="POST">
+                    <input type="hidden" name="action" value="create_disciplina">
+                    <label for="nome_disciplina">Nome da Disciplina:</label>
+                    <input type="text" id="nome_disciplina" name="nome_disciplina" required>
+                    <label for="descricao_disciplina">Descrição (Opcional):</label>
+                    <textarea id="descricao_disciplina" name="descricao" rows="3"></textarea>
+                    <button type="submit" class="primary">Criar Disciplina</button>
+                </form>
+            </div>
+        </div>
     </div>
     """
     
-    # --- Formulário 3: Atribuir Professor à Turma ---
-    form_atribuir = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-        <h2>3. Atribuir Professor à Turma</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="assign_professor">
-            <label for="turma_id">Turma:</label>
-            <select name="turma_id">{turma_options}</select>
-            <label for="professor_id">ID do Professor (Busque o ID na tabela 'usuarios'):</label>
-            <input type="number" name="professor_id" required>
-            <button type="submit">Atribuir Professor</button>
-        </form>
+    # === SEÇÃO 2: GESTÃO DE TURMAS ===
+    secao_gestao_turmas = f"""
+    <div class="admin-section">
+        <h2 class="admin-section-title">Gestão de Turmas</h2>
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3>Atribuir Professor à Turma</h3>
+                <form method="POST">
+                    <input type="hidden" name="action" value="assign_professor">
+                    <label for="turma_id">Turma:</label>
+                    <select name="turma_id" id="turma_id">{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <label for="professor_id">Professor:</label>
+                    <select name="professor_id" id="professor_id" required>
+                        {professor_options if professor_options else '<option>Nenhum professor disponível</option>'}
+                    </select>
+                    <div class="info-box">Selecione o professor na lista acima</div>
+                    <button type="submit" class="primary">Atribuir Professor</button>
+                </form>
+            </div>
+            
+            <div class="admin-card">
+                <h3>Associar Disciplinas à Turma</h3>
+                <form method="POST">
+                    <input type="hidden" name="action" value="assign_disciplinas">
+                    <label for="turma_id_disciplina">Turma:</label>
+                    <select name="turma_id_disciplina" id="turma_id_disciplina">{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <label for="disciplinas">Disciplinas:</label>
+                    <select name="disciplinas" id="disciplinas" multiple size="6">{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <div class="info-box">Segure Ctrl (Cmd no Mac) e clique para selecionar múltiplas disciplinas</div>
+                    <button type="submit" class="primary">Associar Disciplinas</button>
+                </form>
+            </div>
+            
+            <div class="admin-card">
+                <h3>Associar Professor à Disciplina</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px;">Atribui um professor específico para uma disciplina específica dentro de uma turma. Útil quando há múltiplos professores, cada um responsável por sua disciplina.</p>
+                <div class="info-box" style="background: #fff3cd; border-left: 4px solid #ffc107; margin-bottom: 15px;">
+                    <strong>IMPORTANTE:</strong> Antes de associar o professor, você deve primeiro associar a disciplina à turma usando o formulário "Associar Disciplinas à Turma" acima.
+                </div>
+                <form method="POST">
+                    <input type="hidden" name="action" value="assign_professor_disciplina">
+                    <label for="turma_id_prof_disc">Turma:</label>
+                    <select name="turma_id_prof_disc" id="turma_id_prof_disc" required>{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <label for="disciplina_id_prof_disc">Disciplina:</label>
+                    <select name="disciplina_id_prof_disc" id="disciplina_id_prof_disc" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <label for="professor_id_prof_disc">Professor:</label>
+                    <select name="professor_id_prof_disc" id="professor_id_prof_disc" required>
+                        {professor_options if professor_options else '<option>Nenhum professor disponível</option>'}
+                    </select>
+                    <div class="info-box">Permite que cada professor tenha sua disciplina específica na turma</div>
+                    <button type="submit" class="primary">Associar Professor à Disciplina</button>
+                </form>
+            </div>
+        </div>
     </div>
     """
     
-    # --- Formulário 4: Associar Disciplinas à Turma ---
-    form_disciplinas = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-        <h2>4. Associar Disciplinas à Turma</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="assign_disciplinas">
-            <label for="turma_id_disciplina">Turma:</label>
-            <select name="turma_id_disciplina">{turma_options}</select>
-            <label for="disciplinas">Disciplinas (Ctrl+click para múltiplas):</label>
-            <select name="disciplinas" multiple size="6">{disciplina_options}</select>
-            <button type="submit">Associar Disciplinas</button>
-        </form>
+    # === SEÇÃO 3: MATRÍCULAS ===
+    secao_matriculas = f"""
+    <div class="admin-section">
+        <h2 class="admin-section-title">Matrículas</h2>
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3>Matricular Aluno</h3>
+                <form method="POST">
+                    <input type="hidden" name="action" value="enroll_student">
+                    <label for="aluno_id">ID do Aluno:</label>
+                    <input type="number" name="aluno_id" id="aluno_id" required>
+                    <div class="info-box">Consulte a tabela de alunos abaixo para encontrar o ID</div>
+                    <label for="turma_id_matricula">Turma:</label>
+                    <select name="turma_id_matricula" id="turma_id_matricula">{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <label for="disciplina_id_matricula">Disciplina:</label>
+                    <select name="disciplina_id_matricula" id="disciplina_id_matricula">{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <button type="submit" class="primary">Matricular Aluno</button>
+                </form>
+            </div>
+        </div>
     </div>
     """
 
-    form_matricular = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-        <h2>5. Matricular Aluno em Turma/Disciplina</h2>
-        <form method="POST">
-            <input type="hidden" name="action" value="enroll_student"> 
+    # === SEÇÃO 4: AÇÕES DESTRUTIVAS ===
+    secao_acoes_destrutivas = f"""
+    <div class="admin-section">
+        <h2 class="admin-section-title" style="border-bottom-color: #d32f2f;">Ações Destrutivas</h2>
+        <div class="admin-grid">
+            <div class="admin-card danger">
+                <h3>Desassociar Disciplina de Turma</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Remove a disciplina da grade da turma. A disciplina não é excluída do sistema.</p>
+                <form method="POST">
+                    <input type="hidden" name="action" value="remove_disciplina_from_turma">
+                    <label for="remove_turma_id">Turma:</label>
+                    <select name="turma_id" id="remove_turma_id" required>{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <label for="remove_disciplina_id">Disciplina a Remover:</label>
+                    <select name="disciplina_id" id="remove_disciplina_id" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <button type="submit" class="danger">Desassociar Disciplina</button>
+                </form>
+            </div>
             
-            <label for="aluno_id">ID do Aluno (Tabela 'alunos'):</label>
-            <input type="number" name="aluno_id" required>
+            <div class="admin-card warning">
+                <h3>Limpar Notas de Disciplina</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Exclui TODAS as notas (NP1, NP2, etc.) associadas à disciplina. Use antes de excluir a disciplina.</p>
+                <form method="POST">
+                    <input type="hidden" name="action" value="delete_notas_da_disciplina">
+                    <label for="delete_notas_disciplina_id">Disciplina:</label>
+                    <select name="disciplina_id_para_limpar" id="delete_notas_disciplina_id" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <button type="submit" class="warning">Limpar Notas</button>
+                </form>
+            </div>
             
-            <label for="turma_id_matricula">Turma:</label>
-            <select name="turma_id_matricula">{turma_options}</select> 
+            <div class="admin-card danger">
+                <h3>Remover Matrícula</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Remove um aluno de uma turma/disciplina. Pode falhar se houver notas lançadas.</p>
+                <form method="POST">
+                    <input type="hidden" name="action" value="delete_matricula">
+                    <label for="delete_matricula_id">ID da Matrícula:</label>
+                    <input type="number" id="delete_matricula_id" name="matricula_id" required>
+                    <div class="info-box">Ação permanente. Use com cuidado.</div>
+                    <button type="submit" class="danger">Excluir Matrícula</button>
+                </form>
+            </div>
             
-            <label for="disciplina_id_matricula">Disciplina:</label>
-            <select name="disciplina_id_matricula">{disciplina_options}</select>
-            
-            <button type="submit">Matricular Aluno</button>
-        </form>
+            <div class="admin-card danger">
+                <h3>Excluir Disciplina (Permanente)</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Exclui a disciplina de TODO o sistema. Só funciona se nenhuma turma ou matrícula depender dela.</p>
+                <form method="POST">
+                    <input type="hidden" name="action" value="delete_disciplina">
+                    <label for="delete_disciplina_id">Disciplina a Excluir:</label>
+                    <select name="disciplina_id" id="delete_disciplina_id" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <div class="info-box">Ação PERMANENTE e IRREVERSÍVEL!</div>
+                    <button type="submit" class="danger">EXCLUIR PERMANENTEMENTE</button>
+                </form>
+            </div>
+        </div>
     </div>
     """
-
-    tabela_professores = """
-    <div style="margin-top: 40px;">
+    
+    # === SEÇÃO 5: LISTAS DE REFERÊNCIA ===
+    # Tabela de Professores
+    tabela_professores_html = """
+    <div class="admin-table-section">
         <h2>Professores Cadastrados</h2>
-        <table class="boletim">
-            <thead><tr><th>ID Usuário</th><th>E-mail</th></tr></thead>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID Usuário</th>
+                    <th>E-mail</th>
+                </tr>
+            </thead>
             <tbody>
     """
-    form_remover_associacao = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #f44336;">
-        <h2>6. Desassociar Disciplina de uma Turma</h2>
-        <p style="font-size: 0.9em; color: #666;">Isso remove a disciplina da grade da turma. (Não exclui a disciplina).</p>
-        <form method="POST">
-            <input type="hidden" name="action" value="remove_disciplina_from_turma">
-            
-            <label for="remove_turma_id">Selecione a Turma:</label>
-            <select name="turma_id" required>{turma_options}</select>
-            
-            <label for="remove_disciplina_id">Selecione a Disciplina a Remover:</label>
-            <select name="disciplina_id" required>{disciplina_options}</select>
-            
-            <button type="submit" style="background: #d32f2f; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer;">
-                Desassociar Disciplina
-            </button>
-        </form>
-    </div>
-    """
-
-    # --- Formulário 7: Excluir Disciplina (Global) ---
-    form_excluir_disciplina = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #f44336;">
-        <h2>7. Excluir Disciplina (Ação Permanente)</h2>
-        <p style="font-size: 0.9em; color: #666;">Isso excluirá a disciplina de TODO o sistema. Só funcionará se nenhuma turma ou matrícula depender dela.</p>
-        <form method="POST">
-            <input type="hidden" name="action" value="delete_disciplina">
-            
-            <label for="delete_disciplina_id">Selecione a Disciplina a Excluir:</label>
-            <select name="disciplina_id" required>{disciplina_options}</select>
-            
-            <button type="submit" style="background: #d32f2f; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer;">
-                EXCLUIR PERMANENTEMENTE
-            </button>
-        </form>
-    </div>
-    """
-
     if recursos.get('professores'):
         for prof in recursos['professores']:
-            tabela_professores += f"<tr><td>{prof.get('id_usuario')}</td><td>{escape(prof.get('email', 'N/A'))}</td></tr>"
+            tabela_professores_html += f"""
+                <tr>
+                    <td>{prof.get('id_usuario')}</td>
+                    <td>{escape(prof.get('email', 'N/A'))}</td>
+                </tr>
+            """
     else:
-        tabela_professores += '<tr><td colspan="2">Nenhum professor encontrado.</td></tr>'
-    tabela_professores += '</tbody></table></div>'
+        tabela_professores_html += '<tr><td colspan="2" style="text-align: center; color: #999; padding: 20px;">Nenhum professor encontrado.</td></tr>'
+    tabela_professores_html += '</tbody></table></div>'
 
-    # --- Tabela de Alunos ---
-    tabela_alunos = """
-    <div style="margin-top: 40px;">
+    # Tabela de Alunos
+    tabela_alunos_html = """
+    <div class="admin-table-section">
         <h2>Alunos Cadastrados</h2>
-        <table class="boletim">
-            <thead><tr><th>ID Aluno</th><th>Nome Completo</th><th>E-mail</th></tr></thead>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID Aluno</th>
+                    <th>Nome Completo</th>
+                    <th>E-mail</th>
+                </tr>
+            </thead>
             <tbody>
     """
-    form_remover_matricula = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #f44336;">
-        <h2>8. Remover Aluno da Turma/Disciplina (Excluir Matrícula)</h2>
-        <p style="font-size: 0.9em; color: #666;">Isso excluirá a matrícula do aluno. (Pode falhar se houver notas lançadas para esta matrícula).</p>
-        <form method="POST">
-            <input type="hidden" name="action" value="delete_matricula">
-            
-            <label for="delete_matricula_id">ID da Matrícula (Tabela 'matriculas'):</label>
-            <input type="number" id="delete_matricula_id" name="matricula_id" required>
-            
-            <button type="submit" style="background: #d32f2f; color: white; ...">
-                EXCLUIR MATRÍCULA
-            </button>
-        </form>
-    </div>
-    """
-
-    form_limpar_notas = f"""
-    <div style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #ff9800;">
-        <h2>9. Limpar Notas de uma Disciplina (Pré-requisito para Excluir)</h2>
-        <p style="font-size: 0.9em; color: #666;">Isso excluirá TODAS as notas (NP1, NP2, etc.) associadas a esta disciplina.</p>
-        <form method="POST">
-            <input type="hidden" name="action" value="delete_notas_da_disciplina">
-            
-            <label for="delete_notas_disciplina_id">Selecione a Disciplina para Limpar:</label>
-            <select name="disciplina_id_para_limpar" required>{disciplina_options}</select>
-            
-            <button type="submit" style="background: #ff9800; color: white; ...">
-                LIMPAR NOTAS DESTA DISCIPLINA
-            </button>
-        </form>
-    </div>
-    """
-    
     if recursos.get('alunos'):
         for aluno in recursos['alunos']:
-             nome_completo = f"{escape(aluno.get('nome', ''))} {escape(aluno.get('sobrenome', ''))}".strip()
-             tabela_alunos += f"<tr><td>{aluno.get('aluno_id')}</td><td>{nome_completo}</td><td>{escape(aluno.get('email', 'N/A'))}</td></tr>"
+            nome_completo = f"{escape(aluno.get('nome', ''))} {escape(aluno.get('sobrenome', ''))}".strip()
+            tabela_alunos_html += f"""
+                <tr>
+                    <td>{aluno.get('aluno_id')}</td>
+                    <td>{nome_completo}</td>
+                    <td>{escape(aluno.get('email', 'N/A'))}</td>
+                </tr>
+            """
     else:
-        tabela_alunos += '<tr><td colspan="3">Nenhum aluno encontrado.</td></tr>'
-    tabela_alunos += '</tbody></table></div>'
+        tabela_alunos_html += '<tr><td colspan="3" style="text-align: center; color: #999; padding: 20px;">Nenhum aluno encontrado.</td></tr>'
+    tabela_alunos_html += '</tbody></table></div>'
 
 
     return f"""
+    {admin_css}
     <h1>Painel do Administrador</h1>
     {feedback_html}
-    {form_create_prof}
-    {form_turma}
-    {form_disciplinas}
-    {form_atribuir}
-    {form_matricular} 
-    {form_disciplinas}
-    {form_remover_associacao} 
-    {form_excluir_disciplina}
-    {form_remover_matricula}
-    {form_limpar_notas} 
+    {secao_criacao}
+    {secao_gestao_turmas}
+    {secao_matriculas}
+    {secao_acoes_destrutivas}
+    {tabela_professores_html}
+    {tabela_alunos_html}
     """
 
 # --------------------------------------------------------------------------------------
@@ -735,13 +1058,13 @@ def login():
             else:
                 # 3. FALHA: Exibe o erro da API
                 erro_msg = response_data.get("message", "Credenciais inválidas.")
-                return render_base(render_login_form(erro_msg), "Erro de Login")
+                return render_login_form(erro_msg)
 
         except requests.exceptions.ConnectionError:
             erro_msg = "ERRO: O servidor Node.js (API) não está rodando na porta 3000."
-            return render_base(render_login_form(erro_msg), "Erro de Conexão")
+            return render_login_form(erro_msg)
 
-    return render_base(render_login_form(), "Página de Login")
+    return render_login_form()
 
 
 @app.route('/logout')
@@ -847,6 +1170,96 @@ def process_admin_action(action, form_data, token):
             method = requests.put
             success_msg = f"Professor {form_data.get('professor_id')} atribuído à turma com sucesso!"
         
+        elif action == 'assign_professor_disciplina':
+            # Associa professor diretamente a uma disciplina específica dentro de uma turma
+            try:
+                turma_id = int(form_data.get('turma_id_prof_disc'))
+                disciplina_id = int(form_data.get('disciplina_id_prof_disc'))
+                professor_id = int(form_data.get('professor_id_prof_disc'))
+            except ValueError:
+                return {"msg": "Erro: IDs inválidos. Verifique Turma, Disciplina e Professor.", "cls": "error"}
+            
+            # Rota para associar professor à disciplina
+            url = f"{API_BASE_URL}/academico/turmas/{turma_id}/disciplinas/{disciplina_id}/professor"
+            payload = {"professor_id": professor_id}
+            # Tenta PUT primeiro, se falhar tenta POST
+            method = requests.put
+            
+            # Tenta fazer a requisição (primeiro com PUT, depois com POST como fallback)
+            try:
+                response = requests.put(url, json=payload, headers={"Authorization": f"Bearer {token}"})
+                
+                # Log para debug
+                print(f"[Flask POST Debug - Assign Professor Disciplina]")
+                print(f"URL: {url}")
+                print(f"Payload: {payload}")
+                print(f"Status: {response.status_code}")
+                print(f"Response Text: {response.text[:500]}")
+                
+                # Se PUT retornar 404, tenta POST
+                if response.status_code == 404:
+                    print("[Flask POST Debug] PUT retornou 404, tentando POST...")
+                    response = requests.post(url, json=payload, headers={"Authorization": f"Bearer {token}"})
+                    print(f"[Flask POST Debug] POST Status: {response.status_code}")
+                    print(f"[Flask POST Debug] POST Response: {response.text[:500]}")
+                
+                # Tenta fazer parse do JSON
+                try:
+                    response_data = response.json()
+                    result_msg = response_data.get("message", f"Erro desconhecido na API ({response.status_code})")
+                    
+                    # Mensagens de erro mais amigáveis baseadas no status code
+                    if response.status_code in [200, 201]:
+                        return {"msg": result_msg, "cls": "success"}
+                    elif response.status_code == 404:
+                        # Mensagens específicas para diferentes tipos de 404
+                        if "disciplina não está associada" in result_msg.lower() or "não está associada" in result_msg.lower():
+                            error_msg = f"{result_msg} Use o formulário 'Associar Disciplinas à Turma' primeiro."
+                        elif "não encontrado" in result_msg.lower():
+                            error_msg = f"{result_msg}"
+                        else:
+                            error_msg = f"{result_msg}"
+                        return {"msg": error_msg, "cls": "error"}
+                    elif response.status_code == 400:
+                        return {"msg": f"{result_msg}", "cls": "error"}
+                    elif response.status_code == 403:
+                        return {"msg": f"{result_msg}", "cls": "error"}
+                    elif response.status_code == 500:
+                        error_detail = response_data.get("error", "")
+                        if error_detail:
+                            return {"msg": f"Erro interno do servidor: {result_msg}\nDetalhes: {error_detail}", "cls": "error"}
+                        return {"msg": f"Erro interno do servidor: {result_msg}", "cls": "error"}
+                    else:
+                        return {"msg": f"{result_msg} (Status: {response.status_code})", "cls": "error"}
+                        
+                except (ValueError, requests.exceptions.JSONDecodeError) as json_err:
+                    # Se não conseguir fazer parse do JSON
+                    print(f"[Flask POST Debug] Erro ao fazer parse JSON: {json_err}")
+                    print(f"[Flask POST Debug] Response completa: {response.text}")
+                    
+                    if response.status_code == 404:
+                        if "Cannot" in response.text or "Cannot POST" in response.text or "Cannot PUT" in response.text:
+                            error_msg = "Rota não encontrada (404). O servidor Node.js precisa ser REINICIADO para carregar as novas rotas."
+                            if "Cannot" in response.text:
+                                error_msg += f"\nErro do servidor: {response.text[:200]}"
+                            return {"msg": error_msg, "cls": "error"}
+                        else:
+                            # HTML de erro do Express
+                            return {"msg": "Rota não encontrada (404). Verifique se o servidor Node.js está rodando e se a rota está implementada.", "cls": "error"}
+                    
+                    error_text = response.text[:500] if len(response.text) > 500 else response.text
+                    return {"msg": f"Resposta inválida da API (Status: {response.status_code}): {error_text}", "cls": "error"}
+                    
+            except requests.exceptions.ConnectionError:
+                return {"msg": "Erro: Não foi possível conectar ao servidor Node.js. Verifique se o servidor está rodando na porta 3000.", "cls": "error"}
+            except requests.exceptions.RequestException as e:
+                return {"msg": f"Erro de Conexão com API: {str(e)}", "cls": "error"}
+            except Exception as e:
+                print(f"[Flask POST Debug] Exceção não tratada: {type(e).__name__}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return {"msg": f"Erro ao processar: {str(e)}", "cls": "error"}
+        
         # ⚠️ (FUTURO) Caso para Associar Disciplinas
         elif action == 'assign_disciplinas':
             # 1. Obter os dados brutos
@@ -866,7 +1279,7 @@ def process_admin_action(action, form_data, token):
                  return {"msg": "Erro: IDs de Turma ou Disciplina inválidos.", "cls": "error"}
 
             # 4. Montar payload e definir chamada
-            url = f"{API_BASE_URL}/academico/turmas/atribuir-disciplinas" # Verifique se a rota na API é 'atribuir-disciplinas'
+            url = f"{API_BASE_URL}/academico/turmas/associar-disciplinas" # Rota correta: associar-disciplinas
             payload = {"turma_id": turma_id_disciplina, "disciplina_ids": disciplina_ids}
             method = requests.post
             # success_msg não é mais necessário aqui, pegaremos da API
@@ -887,28 +1300,43 @@ def process_admin_action(action, form_data, token):
                 print(f"[Flask POST Debug] Texto da Resposta Bruta: '{response.text}'") # Loga o texto
 
                 # Tenta processar como JSON DEPOIS de logar
-                response_data = response.json() 
-
-                print(f"[Flask POST Debug] Resposta JSON API: {response_data}") 
-                
-                result_msg = response_data.get("message", f"Erro desconhecido na API ({response.status_code})")
-                
-                if response.status_code in [200, 201]:
-                    result_cls = "success"
-                else:
-                    result_cls = "error"
-                
-                return {"msg": result_msg, "cls": result_cls}
-                
+                try:
+                    response_data = response.json()
+                    print(f"[Flask POST Debug] Resposta JSON API: {response_data}")
+                    
+                    result_msg = response_data.get("message", f"Erro desconhecido na API ({response.status_code})")
+                    
+                    # Preserva quebras de linha na mensagem (substitui \n por <br> para HTML)
+                    if isinstance(result_msg, str):
+                        result_msg_html = result_msg.replace('\n', '<br>')
+                    else:
+                        result_msg_html = str(result_msg)
+                    
+                    if response.status_code in [200, 201]:
+                        result_cls = "success"
+                    else:
+                        result_cls = "error"
+                    
+                    return {"msg": result_msg_html, "cls": result_cls}
+                    
+                except (ValueError, requests.exceptions.JSONDecodeError) as json_err:
+                    # Se a resposta não for JSON válido, mostra o texto da resposta ou erro genérico
+                    print(f"[Flask POST Debug] Erro ao fazer parse JSON: {json_err}")
+                    if response.text:
+                        # Tenta mostrar parte do texto da resposta
+                        error_text = response.text[:200] if len(response.text) > 200 else response.text
+                        return {"msg": f"Resposta inválida da API (Status: {response.status_code}): {error_text}", "cls": "error"}
+                    else:
+                        return {"msg": f"API retornou resposta vazia (Status: {response.status_code})", "cls": "error"}
 
             except requests.exceptions.RequestException as e:
                 # Captura erro de conexão
                 print(f"[Flask POST Debug] Erro de Conexão: {e}")
-                return {"msg": f"Erro de Conexão com API: {e}", "cls": "error"}
+                return {"msg": f"Erro de Conexão com API: {str(e)}", "cls": "error"}
             except Exception as e: 
                 # Captura outros erros (ex: API não retornou JSON válido)
                 print(f"[Flask POST Debug] Erro ao processar resposta da API: {e}")
-                return {"msg": f"Erro ao processar resposta da API: {e}", "cls": "error"}
+                return {"msg": f"Erro ao processar resposta da API: {str(e)}", "cls": "error"}
 
         elif action == 'enroll_student':
             url = f"{API_BASE_URL}/academico/matriculas"
@@ -1103,45 +1531,245 @@ def painel_aluno():
         media_geral_decimal = sum(notas_validas) / Decimal(len(notas_validas))
         media_geral = formatar_nota(media_geral_decimal, bold=True) # Reusa a função de formatação
 
-    # 4. Constrói o HTML do Dashboard do Aluno (Melhorado)
+    # 4. Constrói o HTML do Dashboard do Aluno (Melhorado e Moderno)
     
-    # (Estilos CSS para os cards do dashboard)
-    style_bloco = "background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center;"
-    style_h2_bloco = "margin: 0; font-size: 2.5rem; color: var(--accent);"
-    style_p_bloco = "margin: 5px 0 0 0; color: var(--muted);"
-
-    conteudo_aluno_html = f'''
-    <h1>Painel do Aluno (Dashboard)</h1>
-    <p>Olá, Aluno! Este é o resumo do seu progresso acadêmico.</p>
+    # Determina a cor da média baseado no valor
+    media_cor = "#28a745"  # Verde (aprovado)
+    if media_geral != "N/D":
+        try:
+            media_num = float(media_geral.replace(',', '.'))
+            if media_num < 5:
+                media_cor = "#dc3545"  # Vermelho (reprovado)
+            elif media_num < 7:
+                media_cor = "#ffc107"  # Amarelo (recuperação)
+        except:
+            pass
     
-    {f'<p style="color:red; font-weight: bold;">{escape(feedback)}</p>' if feedback else ''}
-
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 30px;">
-        
-        <div style="{style_bloco}">
-            <h2 style="{style_h2_bloco}">{media_geral}</h2>
-            <p style="{style_p_bloco}">Média Geral (NP1+NP2)</p>
-        </div>
-        
-        <div style="{style_bloco}">
-            <h2 style="{style_h2_bloco}">{total_disciplinas}</h2>
-            <p style="{style_p_bloco}">Disciplinas Matriculadas</p>
-        </div>
-        
-        <div style="{style_bloco}">
-            <h2 style="{style_h2_bloco}">{faltas}</h2>
-            <p style="{style_p_bloco}">Total de Faltas</p>
-        </div>
-        
+    aluno_css = """
+    <style>
+        .aluno-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        .aluno-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+        .aluno-header p {
+            margin: 0;
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        .stat-card {
+            background: #fff;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-left: 5px solid;
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(0,0,0,0.03) 0%, transparent 70%);
+            border-radius: 50%;
+            transform: translate(30px, -30px);
+        }
+        .stat-card.media {
+            border-left-color: var(--media-color, #667eea);
+        }
+        .stat-card.disciplinas {
+            border-left-color: #4CAF50;
+        }
+        .stat-card.faltas {
+            border-left-color: #ff9800;
+        }
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+            color: var(--stat-color, #333);
+            line-height: 1;
+        }
+        .stat-label {
+            font-size: 1rem;
+            color: #666;
+            margin: 0;
+            font-weight: 500;
+        }
+        .stat-description {
+            font-size: 0.85rem;
+            color: #999;
+            margin-top: 8px;
+        }
+        .quick-actions {
+            background: #fff;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-top: 30px;
+        }
+        .quick-actions h3 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 1.4rem;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.3);
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4);
+        }
+        .action-btn.secondary {
+            background: #f8f9fa;
+            color: #333;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .action-btn.secondary:hover {
+            background: #e9ecef;
+        }
+        .feedback-alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: #f8f9fa;
+            border-radius: 16px;
+            color: #666;
+            margin-top: 30px;
+        }
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .stat-value {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+    """
+    
+    # Feedback de erro se houver
+    feedback_html = ''
+    if feedback:
+        feedback_html = f'<div class="feedback-alert">{escape(feedback)}</div>'
+    
+    # Header do painel
+    header_html = """
+    <div class="aluno-header">
+        <h1>Painel do Aluno</h1>
+        <p>Bem-vindo! Acompanhe seu desempenho acadêmico em tempo real.</p>
     </div>
+    """
     
-    <div style="margin-top: 40px;">
+    # Cards de estatísticas
+    stats_html = f"""
+    <div class="stats-grid">
+        <div class="stat-card media" style="--media-color: {media_cor}; --stat-color: {media_cor};">
+            <div class="stat-value">{media_geral}</div>
+            <p class="stat-label">Média Geral</p>
+            <p class="stat-description">Baseada em NP1 e NP2</p>
+        </div>
+        
+        <div class="stat-card disciplinas" style="--stat-color: #4CAF50;">
+            <div class="stat-value">{total_disciplinas}</div>
+            <p class="stat-label">Disciplinas Matriculadas</p>
+            <p class="stat-description">Total de matérias cursadas</p>
+        </div>
+        
+        <div class="stat-card faltas" style="--stat-color: #ff9800;">
+            <div class="stat-value">{faltas}</div>
+            <p class="stat-label">Total de Faltas</p>
+            <p class="stat-description">Registro de ausências</p>
+        </div>
+    </div>
+    """
+    
+    # Ações rápidas
+    boletim_url = url_for('boletim')
+    quick_actions_html = f"""
+    <div class="quick-actions">
         <h3>Ações Rápidas</h3>
-        <a href="{url_for('boletim')}" style="background: var(--accent); color: white; padding: 10px 15px; border-radius: 4px; text-decoration: none;">
-            Ver Boletim Detalhado
-        </a>
+        <div class="action-buttons">
+            <a href="{boletim_url}" class="action-btn">
+                Ver Boletim Completo
+            </a>
+        </div>
     </div>
-    '''
+    """
+    
+    # Se não houver dados, mostra estado vazio
+    if total_disciplinas == 0 and not feedback:
+        empty_state_html = """
+        <div class="empty-state">
+            <h3>Nenhum dado disponível</h3>
+            <p>Você ainda não possui disciplinas matriculadas ou notas lançadas.</p>
+        </div>
+        """
+        conteudo_aluno_html = f'''
+        {aluno_css}
+        {header_html}
+        {feedback_html}
+        {empty_state_html}
+        {quick_actions_html}
+        '''
+    else:
+        conteudo_aluno_html = f'''
+        {aluno_css}
+        {header_html}
+        {feedback_html}
+        {stats_html}
+        {quick_actions_html}
+        '''
     
     # 5. Renderiza usando a base com a sidebar
     # (Certifique-se que 'render_base' é a função com a sidebar!)
@@ -1293,47 +1921,9 @@ def painel_professor():
     turmas = []
     message = request.args.get('msg') # Mensagem vinda de um redirect (GET)
     message_class = request.args.get('cls')
-    notas_form_result = None # Feedback específico do POST de nota
 
     # ----------------------------------------------------
-    # LÓGICA DE LANÇAMENTO DE NOTAS (POST)
-    # ----------------------------------------------------
-    if request.method == 'POST':
-        # Verifica se a ação é lançar nota (caso haja mais formulários no futuro)
-        action = request.form.get('action', 'lancar_nota') # Assume 'lancar_nota' por padrão
-        
-        if action == 'lancar_nota':
-            aluno_id = request.form.get('aluno_id')
-            disciplina_id = request.form.get('disciplina_id')
-            valor_nota = request.form.get('valor_nota')
-            
-            try:
-                # Chama a API Node.js para Lançar a Nota
-                response = requests.post(
-                    f"{API_BASE_URL}/academico/notas", 
-                    json={
-                        "aluno_id": int(aluno_id), 
-                        "disciplina_id": int(disciplina_id), 
-                        "valor_nota": float(valor_nota)
-                    }, 
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                
-                if response.status_code == 201:
-                    notas_form_result = {"msg": "Nota lançada com sucesso!", "cls": "success"}
-                else:
-                    error_data = response.json()
-                    notas_form_result = {"msg": error_data.get("message", f"Erro na API ({response.status_code})"), "cls": "error"}
-
-            except requests.exceptions.RequestException:
-                notas_form_result = {"msg": "ERRO: Não foi possível conectar à API Node.js.", "cls": "error"}
-            except ValueError:
-                 notas_form_result = {"msg": "Erro: ID do Aluno, ID da Disciplina e Nota devem ser números válidos.", "cls": "error"}
-            
-            # Após o POST, continua para o GET para recarregar a página com feedback
-    
-    # ----------------------------------------------------
-    # LÓGICA DE BUSCA DE TURMAS (GET - Sempre executa, mesmo após POST)
+    # LÓGICA DE BUSCA DE TURMAS (GET)
     # ----------------------------------------------------
     try:
         # Chama a API Node.js (rota correta: /professor/turmas)
@@ -1345,23 +1935,23 @@ def painel_professor():
         
         if response_turmas.status_code == 200 and 'turmas' in response_data_turmas:
             turmas = response_data_turmas.get('turmas', [])
-            # A mensagem de busca só é relevante se não houver feedback do POST
-            if not notas_form_result and not message: 
+            # A mensagem de busca só é relevante se não houver mensagem anterior
+            if not message: 
                 message = "Suas turmas foram carregadas."
                 message_class = "success"
         else:
-            # Se a busca falhar, mas houve um POST, não sobrescreve o feedback do POST
-            if not notas_form_result: 
+            # Se a busca falhar, mostra mensagem de erro
+            if not message:
                 message = response_data_turmas.get('message', 'Erro ao carregar turmas da API.')
                 message_class = 'error'
             
     except requests.exceptions.RequestException:
-        if not notas_form_result: # Só mostra erro de conexão se não houver feedback de POST
+        if not message: # Só mostra erro de conexão se não houver mensagem anterior
             message = "ERRO: Não foi possível conectar à API Node.js."
             message_class = "error"
             
     # Renderiza o conteúdo final passando todos os dados necessários
-    conteudo_professor_html = render_professor_content(user_type, turmas, message, message_class, notas_form_result)
+    conteudo_professor_html = render_professor_content(user_type, turmas, message, message_class)
     
     return render_base(conteudo_professor_html, "Painel do Professor")
 
@@ -1531,114 +2121,483 @@ def build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback):
     """Constrói a tabela de alunos com formulários de ação (Nota/Presença)."""
     from flask import url_for # Garante que url_for funciona
     
-    html = f'<h1>Gestão de Turma/Disciplina</h1>'
-    html += f'<h2>Turma: {turma_id} | Disciplina: {disciplina_id}</h2>'
-    html += f'<p style="color:red; font-weight: bold;">{escape(feedback)}</p>'
+    # Buscar informações da turma e disciplina para exibir no header
+    # Por enquanto, vamos usar apenas os IDs, mas poderia buscar os nomes da API
+    gestao_css = """
+    <style>
+        .gestao-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        .gestao-header h1 {
+            margin: 0 0 15px 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        .gestao-info {
+            display: flex;
+            gap: 30px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .info-badge {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 10px 20px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        .info-badge strong {
+            display: block;
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+        }
+        .info-badge span {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .action-buttons-top {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        .btn-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .btn-nav.secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-nav.secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        }
+        .btn-nav.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-nav.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4);
+        }
+        .feedback-message {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+        .feedback-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left-color: #dc3545;
+        }
+        .gestao-table-container {
+            background: #fff;
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            overflow-x: auto;
+        }
+        .gestao-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .gestao-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .gestao-table th {
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .gestao-table th.text-center {
+            text-align: center;
+        }
+        .gestao-table tbody tr {
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.2s;
+        }
+        .gestao-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        .gestao-table tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .gestao-table tbody tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+        .gestao-table td {
+            padding: 15px 12px;
+            color: #333;
+            font-size: 0.95rem;
+        }
+        .gestao-table td.text-center {
+            text-align: center;
+        }
+        .nota-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .nota-badge.presente {
+            background: #d4edda;
+            color: #155724;
+        }
+        .nota-badge.ausente {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .nota-badge.empty {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .media-badge {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+        .media-badge.aprovado {
+            background: #d4edda;
+            color: #155724;
+        }
+        .media-badge.recuperacao {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .media-badge.reprovado {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .form-nota {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .form-nota input[type="number"] {
+            width: 80px;
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s;
+        }
+        .form-nota input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .form-nota select {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        .form-nota select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn-lancar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+        }
+        .btn-lancar:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+        }
+        .btn-presenca {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .btn-presenca.presente {
+            background: #28a745;
+            color: white;
+        }
+        .btn-presenca.presente:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(40, 167, 69, 0.4);
+        }
+        .btn-presenca.ausente {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-presenca.ausente:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.4);
+        }
+        .presenca-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: #f8f9fa;
+            border-radius: 16px;
+            color: #666;
+            margin-top: 20px;
+        }
+        .empty-state h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        @media (max-width: 768px) {
+            .gestao-table-container {
+                padding: 15px;
+            }
+            .gestao-table {
+                font-size: 0.85rem;
+            }
+            .gestao-table th,
+            .gestao-table td {
+                padding: 10px 8px;
+            }
+            .form-nota {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .form-nota input,
+            .form-nota select,
+            .btn-lancar {
+                width: 100%;
+            }
+        }
+    </style>
+    """
     
-    # Links de Navegação (Voltar e Relatório C)
-    html += f'''
-    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px;">
-        <a href="{url_for('painel_professor')}" 
-           style="background: #6c757d; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none;">
-           &laquo; Voltar para Minhas Turmas 
+    # Header com informações
+    header_html = f"""
+    <div class="gestao-header">
+        <h1>Gestão de Turma/Disciplina</h1>
+        <div class="gestao-info">
+            <div class="info-badge">
+                <strong>Turma</strong>
+                <span>ID: {turma_id}</span>
+            </div>
+            <div class="info-badge">
+                <strong>Disciplina</strong>
+                <span>ID: {disciplina_id}</span>
+            </div>
+            <div class="info-badge">
+                <strong>Total de Alunos</strong>
+                <span>{len(alunos) if alunos else 0}</span>
+            </div>
+        </div>
+    </div>
+    """
+    
+    # Feedback message
+    feedback_html = ''
+    if feedback:
+        feedback_cls = 'error' if 'ERRO' in feedback.upper() or 'erro' in feedback.lower() else ''
+        feedback_html = f'<div class="feedback-message {feedback_cls}">{escape(feedback)}</div>'
+    
+    # Botões de navegação
+    nav_buttons = f"""
+    <div class="action-buttons-top">
+        <a href="{url_for('painel_professor')}" class="btn-nav secondary">
+            &laquo; Voltar para Minhas Turmas
         </a>
-        <a href="{url_for('relatorio_desempenho', turma_id=turma_id, disciplina_id=disciplina_id)}" 
-           style="background: #007bff; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none;">
-           Ver Relatório de Desempenho (C)
+        <a href="{url_for('relatorio_desempenho', turma_id=turma_id, disciplina_id=disciplina_id)}" class="btn-nav primary">
+            Ver Relatório de Desempenho (C)
         </a>
     </div>
-    '''
+    """
     
-    # --- Tabela de Alunos (Início) ---
-    # ⚠️ Usamos o estilo da classe 'boletim' que você já definiu
-    html += '''
-    <table class="boletim" style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-        <thead>
-            <tr style="background-color: #f0f0f0; text-align: left;">
-                <th style="padding: 10px; border: 1px solid #ddd;">ID Aluno</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Nome</th>
-                <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">NP1</th>
-                <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">NP2</th>
-                <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Média Final</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Lançar Nova Nota</th>
-                <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Presença</th>
-            </tr>
-        </thead>
-        <tbody>
-    '''
-    
-    # --- Loop pelos Alunos (Ponto Crítico) ---
+    # Tabela de alunos
     if not alunos:
-        html += '<tr><td colspan="5" style="padding: 10px; border: 1px solid #ddd; text-align: center;">Nenhum aluno matriculado nesta turma/disciplina.</td></tr>'
-    else:
-        # Se a lista NÃO está vazia, o loop executa
-        for aluno in alunos:
-            # Pega os dados com segurança
-            aluno_id = aluno.get('aluno_id', 'Erro')
-            nome = escape(aluno.get('nome', ''))
-            sobrenome = escape(aluno.get('sobrenome', ''))
-            nome_completo = f"{nome} {sobrenome}".strip()
-            nota_np1 = aluno.get('nota_np1')
-            nota_np2 = aluno.get('nota_np2')
-            media_final = aluno.get('media_final')
-            
-            # Pega a média (que a API chama de 'nota_atual' ou 'media_final')
-            
-            
-            matricula_id = aluno.get('matricula_id', '') # Essencial para Presença
-
-            # Constrói a linha da tabela (F-string corrigida)
-            html += f'''
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 8px; border: 1px solid #ddd;">{aluno_id}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">{nome_completo}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{nota_np1}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{nota_np2}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{media_final}</td>
-                
-                <td style="padding: 8px; border: 1px solid #ddd;">
-                    <form action="{url_for('lancar_nota_form')}" method="POST" style="display:inline-flex; gap: 5px; align-items: center;">
-                        <input type="hidden" name="aluno_id" value="{aluno_id}">
-                        <input type="hidden" name="disciplina_id" value="{disciplina_id}">
-                        <input type="hidden" name="turma_id" value="{turma_id}">
-                        
-                        <input type="number" step="0.1" min="0" max="10" name="valor_nota" placeholder="Nota" required style="width: 70px; padding: 4px; border-radius: 4px;">
-                        <select name="tipo_avaliacao" required style="padding: 4px; border-radius: 4px;">
-                            <option value="NP1">NP1</option>
-                            <option value="NP2">NP2</option>
-                            <option value="Exame">Exame</option>
-                        </select>
-                        <button type="submit" style="background: var(--accent); ...">Lançar</button>
-                    </form>
-                </td>
-                
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                    <form action="{url_for('marcar_presenca_form')}" method="POST" style="display:inline;">
-                    <input type="hidden" name="matricula_id" value="{matricula_id}">
-                    <input type="hidden" name="status" value="presente">
-                    
-                    <input type="hidden" name="turma_id" value="{turma_id}">
-                    <input type="hidden" name="disciplina_id" value="{disciplina_id}">
-                    
-                    <button type="submit" style="background: green; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">P</button>
-                </form>
-                
-                
-                <form action="{url_for('marcar_presenca_form')}" method="POST" style="display:inline;">
-                    <input type="hidden" name="matricula_id" value="{matricula_id}">
-                    <input type="hidden" name="status" value="ausente">
-                    
-                    <input type="hidden" name="turma_id" value="{turma_id}">
-                    <input type="hidden" name="disciplina_id" value="{disciplina_id}">
-                    
-                    <button type="submit" style="background: red; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">F</button>
-                </form>
-                </td>
-            </tr>
-            '''
+        empty_state_html = """
+        <div class="empty-state">
+            <h3>Nenhum aluno matriculado</h3>
+            <p>Nenhum aluno foi encontrado para esta turma e disciplina.</p>
+        </div>
+        """
+        return f"""
+        {gestao_css}
+        {header_html}
+        {feedback_html}
+        {nav_buttons}
+        {empty_state_html}
+        """
     
-    html += '</tbody></table>'
-    return html
+    # Construir tabela
+    table_html = """
+    <div class="gestao-table-container">
+        <table class="gestao-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome do Aluno</th>
+                    <th class="text-center">NP1</th>
+                    <th class="text-center">NP2</th>
+                    <th class="text-center">Média Final</th>
+                    <th>Lançar Nota</th>
+                    <th class="text-center">Presença</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    for aluno in alunos:
+        aluno_id = aluno.get('aluno_id', 'N/A')
+        nome = escape(aluno.get('nome', ''))
+        sobrenome = escape(aluno.get('sobrenome', ''))
+        nome_completo = f"{nome} {sobrenome}".strip()
+        
+        nota_np1 = aluno.get('nota_np1')
+        nota_np2 = aluno.get('nota_np2')
+        media_final = aluno.get('media_final')
+        
+        matricula_id = aluno.get('matricula_id', '')
+        
+        # Formata notas com badges
+        def formatar_nota_badge(nota):
+            if nota is None:
+                return '<span class="nota-badge empty">N/D</span>'
+            try:
+                nota_float = float(nota)
+                return f'<span class="nota-badge presente">{nota_float:.1f}</span>'
+            except:
+                return f'<span class="nota-badge empty">{nota}</span>'
+        
+        # Formata média com badge colorido
+        def formatar_media_badge(media):
+            if media is None:
+                return '<span class="media-badge empty">N/D</span>'
+            try:
+                media_float = float(media)
+                if media_float >= 7:
+                    classe = 'aprovado'
+                    texto = f'{media_float:.1f}'
+                elif media_float >= 5:
+                    classe = 'recuperacao'
+                    texto = f'{media_float:.1f}'
+                else:
+                    classe = 'reprovado'
+                    texto = f'{media_float:.1f}'
+                return f'<span class="media-badge {classe}">{texto}</span>'
+            except:
+                return f'<span class="media-badge empty">{media}</span>'
+        
+        nota_np1_html = formatar_nota_badge(nota_np1)
+        nota_np2_html = formatar_nota_badge(nota_np2)
+        media_html = formatar_media_badge(media_final)
+        
+        # Formulário de lançar nota
+        form_nota_html = f"""
+        <form action="{url_for('lancar_nota_form')}" method="POST" class="form-nota">
+            <input type="hidden" name="aluno_id" value="{aluno_id}">
+            <input type="hidden" name="disciplina_id" value="{disciplina_id}">
+            <input type="hidden" name="turma_id" value="{turma_id}">
+            <input type="number" 
+                   step="0.1" 
+                   min="0" 
+                   max="10" 
+                   name="valor_nota" 
+                   placeholder="Nota" 
+                   required>
+            <select name="tipo_avaliacao" required>
+                <option value="NP1">NP1</option>
+                <option value="NP2">NP2</option>
+                <option value="Exame">Exame</option>
+            </select>
+            <button type="submit" class="btn-lancar">Lançar</button>
+        </form>
+        """
+        
+        # Botões de presença
+        presenca_html = f"""
+        <div class="presenca-actions">
+            <form action="{url_for('marcar_presenca_form')}" method="POST" style="margin: 0;">
+                <input type="hidden" name="matricula_id" value="{matricula_id}">
+                <input type="hidden" name="status" value="presente">
+                <input type="hidden" name="turma_id" value="{turma_id}">
+                <input type="hidden" name="disciplina_id" value="{disciplina_id}">
+                <button type="submit" class="btn-presenca presente" title="Marcar Presença">P</button>
+            </form>
+            <form action="{url_for('marcar_presenca_form')}" method="POST" style="margin: 0;">
+                <input type="hidden" name="matricula_id" value="{matricula_id}">
+                <input type="hidden" name="status" value="ausente">
+                <input type="hidden" name="turma_id" value="{turma_id}">
+                <input type="hidden" name="disciplina_id" value="{disciplina_id}">
+                <button type="submit" class="btn-presenca ausente" title="Marcar Falta">F</button>
+            </form>
+        </div>
+        """
+        
+        table_html += f"""
+            <tr>
+                <td><strong>{aluno_id}</strong></td>
+                <td><strong>{nome_completo}</strong></td>
+                <td class="text-center">{nota_np1_html}</td>
+                <td class="text-center">{nota_np2_html}</td>
+                <td class="text-center">{media_html}</td>
+                <td>{form_nota_html}</td>
+                <td class="text-center">{presenca_html}</td>
+            </tr>
+        """
+    
+    table_html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    
+    return f"""
+    {gestao_css}
+    {header_html}
+    {feedback_html}
+    {nav_buttons}
+    {table_html}
+    """
 
 @app.route('/relatorio/desempenho/<int:turma_id>/<int:disciplina_id>')
 @require_login # Garante que está logado
@@ -1681,14 +2640,55 @@ def relatorio_desempenho(turma_id, disciplina_id):
                 continue
 
     if not desempenhos:
-         return render_base("<h1>Relatório de Desempenho</h1><p>Nenhum aluno com média lançada para ordenar.</p>", "Relatório")
+        empty_html = """
+        <style>
+            .relatorio-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 30px;
+                border-radius: 16px;
+                margin-bottom: 30px;
+                box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+            }
+            .relatorio-header h1 {
+                margin: 0 0 15px 0;
+                font-size: 2rem;
+                font-weight: 700;
+            }
+            .empty-state {
+                text-align: center;
+                padding: 60px 20px;
+                background: #f8f9fa;
+                border-radius: 16px;
+                color: #666;
+                margin-top: 20px;
+            }
+            .empty-state h3 {
+                margin: 0 0 10px 0;
+                color: #333;
+            }
+        </style>
+        <div class="relatorio-header">
+            <h1>Relatório de Desempenho</h1>
+        </div>
+        <div class="empty-state">
+            <h3>Nenhum aluno com média lançada</h3>
+            <p>Não há dados suficientes para gerar o ranking de desempenho.</p>
+            <p style="margin-top: 15px;">
+                <a href="{url_for('gerenciar_turma', turma_id=turma_id, disciplina_id=disciplina_id)}" 
+                   style="display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 8px; margin-top: 15px;">
+                   &laquo; Voltar para Gestão
+                </a>
+            </p>
+        </div>
+        """
+        return render_base(empty_html.format(url_for=url_for), "Relatório de Desempenho")
     
     # Calcula a média da turma (como fizemos antes)
     media_da_turma = Decimal('0.0')
     if medias_validas:
         media_da_turma = sum(medias_validas) / Decimal(len(medias_validas))
-    media_da_turma_str = media_da_turma
-
+    media_da_turma_str = f"{float(media_da_turma):.2f}"
 
     # 2. Chama a função C para ordenar
     count = len(desempenhos)
@@ -1696,19 +2696,371 @@ def relatorio_desempenho(turma_id, disciplina_id):
     array_c = ArrayType(*desempenhos)
     
     lib_c.ordenar_por_desempenho(array_c, count) # ⬅️ CHAMADA CRÍTICA AO C
+    
+    # Buscar nomes dos alunos para exibir no ranking
+    alunos_dict = {aluno.get('aluno_id'): aluno for aluno in alunos_data}
 
     # 3. Renderiza o HTML com os dados ordenados
-    html = f"<h1>Relatório de Desempenho (Turma {turma_id} / Disc {disciplina_id})</h1>"
-    html += f'<h2 style="color: #333;">Média Geral da Turma: {media_da_turma_str}</h2>'
-    html += "<h3>Ranking de Desempenho (Ordenado pelo módulo C)</h3>"
-    html += "<table class='boletim'><thead><tr><th>Ranking</th><th>ID Aluno</th><th>Média Final</th></tr></thead><tbody>"
+    relatorio_css = """
+    <style>
+        .relatorio-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        .relatorio-header h1 {
+            margin: 0 0 15px 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        .relatorio-info {
+            display: flex;
+            gap: 30px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .info-badge {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 10px 20px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        .info-badge strong {
+            display: block;
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+        }
+        .info-badge span {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .stat-card.media .value {
+            color: #667eea;
+        }
+        .stat-card.total .value {
+            color: #764ba2;
+        }
+        .stat-card.aprovados .value {
+            color: #28a745;
+        }
+        .stat-card.reprovados .value {
+            color: #dc3545;
+        }
+        .ranking-section {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        .ranking-section h2 {
+            margin: 0 0 25px 0;
+            color: #333;
+            font-size: 1.5rem;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+        .ranking-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .ranking-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .ranking-table th {
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .ranking-table th.text-center {
+            text-align: center;
+        }
+        .ranking-table tbody tr {
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.2s;
+        }
+        .ranking-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        .ranking-table tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .ranking-table tbody tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+        .ranking-table tbody tr:first-child {
+            background: linear-gradient(90deg, #fff9e6 0%, #ffffff 100%);
+            border-left: 4px solid #ffd700;
+        }
+        .ranking-table tbody tr:nth-child(2) {
+            background: linear-gradient(90deg, #f5f5f5 0%, #ffffff 100%);
+            border-left: 4px solid #c0c0c0;
+        }
+        .ranking-table tbody tr:nth-child(3) {
+            background: linear-gradient(90deg, #fff4e6 0%, #ffffff 100%);
+            border-left: 4px solid #cd7f32;
+        }
+        .ranking-table td {
+            padding: 15px 12px;
+            color: #333;
+            font-size: 0.95rem;
+        }
+        .ranking-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 1rem;
+            color: white;
+        }
+        .ranking-badge.ouro {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+        }
+        .ranking-badge.prata {
+            background: linear-gradient(135deg, #c0c0c0 0%, #e8e8e8 100%);
+            box-shadow: 0 4px 12px rgba(192, 192, 192, 0.4);
+        }
+        .ranking-badge.bronze {
+            background: linear-gradient(135deg, #cd7f32 0%, #e6a85c 100%);
+            box-shadow: 0 4px 12px rgba(205, 127, 50, 0.4);
+        }
+        .ranking-badge.normal {
+            background: #667eea;
+            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+        }
+        .media-badge {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+        .media-badge.aprovado {
+            background: #d4edda;
+            color: #155724;
+        }
+        .media-badge.recuperacao {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .media-badge.reprovado {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .btn-voltar {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: #6c757d;
+            color: white;
+        }
+        .btn-voltar:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        }
+        .badge-modulo {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-left: 10px;
+            font-weight: 500;
+        }
+        @media (max-width: 768px) {
+            .ranking-section {
+                padding: 15px;
+            }
+            .stats-cards {
+                grid-template-columns: 1fr;
+            }
+            .ranking-table {
+                font-size: 0.85rem;
+            }
+            .ranking-table th,
+            .ranking-table td {
+                padding: 10px 8px;
+            }
+        }
+    </style>
+    """
+    
+    # Calcular estatísticas
+    aprovados = sum(1 for aluno in array_c if aluno.media_final >= 7)
+    reprovados = sum(1 for aluno in array_c if aluno.media_final < 5)
+    recuperacao = sum(1 for aluno in array_c if 5 <= aluno.media_final < 7)
+    
+    # Header
+    header_html = f"""
+    <div class="relatorio-header">
+        <h1>Relatório de Desempenho <span class="badge-modulo">Ordenado pelo Módulo C</span></h1>
+        <div class="relatorio-info">
+            <div class="info-badge">
+                <strong>Turma</strong>
+                <span>ID: {turma_id}</span>
+            </div>
+            <div class="info-badge">
+                <strong>Disciplina</strong>
+                <span>ID: {disciplina_id}</span>
+            </div>
+        </div>
+    </div>
+    """
+    
+    # Cards de estatísticas
+    stats_html = f"""
+    <div class="stats-cards">
+        <div class="stat-card media">
+            <h3>Média Geral da Turma</h3>
+            <p class="value">{media_da_turma_str}</p>
+        </div>
+        <div class="stat-card total">
+            <h3>Total de Alunos</h3>
+            <p class="value">{count}</p>
+        </div>
+        <div class="stat-card aprovados">
+            <h3>Aprovados (≥ 7.0)</h3>
+            <p class="value">{aprovados}</p>
+        </div>
+        <div class="stat-card reprovados">
+            <h3>Reprovados (&lt; 5.0)</h3>
+            <p class="value">{reprovados}</p>
+        </div>
+    </div>
+    """
+    
+    # Tabela de ranking
+    ranking_html = """
+    <div class="ranking-section">
+        <h2>Ranking de Desempenho</h2>
+        <table class="ranking-table">
+            <thead>
+                <tr>
+                    <th>Posição</th>
+                    <th>ID Aluno</th>
+                    <th>Nome do Aluno</th>
+                    <th class="text-center">Média Final</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    # Função para determinar badge de ranking
+    def get_ranking_badge(position):
+        if position == 1:
+            return '<span class="ranking-badge ouro">1</span>'
+        elif position == 2:
+            return '<span class="ranking-badge prata">2</span>'
+        elif position == 3:
+            return '<span class="ranking-badge bronze">3</span>'
+        else:
+            return f'<span class="ranking-badge normal">{position}</span>'
+    
+    # Função para formatar média com badge
+    def formatar_media_badge(media):
+        try:
+            media_float = float(media)
+            if media_float >= 7:
+                classe = 'aprovado'
+            elif media_float >= 5:
+                classe = 'recuperacao'
+            else:
+                classe = 'reprovado'
+            return f'<span class="media-badge {classe}">{media_float:.2f}</span>'
+        except:
+            return f'<span class="media-badge reprovado">{media}</span>'
     
     # Itera sobre o array que o C modificou
-    for i, aluno in enumerate(array_c): 
-        html += f"<tr><td>{i+1}º</td><td>{aluno.id_aluno}</td><td>{aluno.media_final:.2f}</td></tr>"
+    for i, aluno in enumerate(array_c):
+        position = i + 1
+        aluno_id = aluno.id_aluno
+        aluno_info = alunos_dict.get(aluno_id, {})
+        nome_aluno = f"{aluno_info.get('nome', '')} {aluno_info.get('sobrenome', '')}".strip()
+        if not nome_aluno:
+            nome_aluno = f"Aluno ID {aluno_id}"
         
-    html += "</tbody></table>"
-    html += f"<p style='margin-top: 20px;'><a href='{url_for('gerenciar_turma', turma_id=turma_id, disciplina_id=disciplina_id)}'>&laquo; Voltar para Gestão</a></p>"
+        ranking_badge = get_ranking_badge(position)
+        media_badge = formatar_media_badge(aluno.media_final)
+        
+        ranking_html += f"""
+            <tr>
+                <td>{ranking_badge}</td>
+                <td><strong>{aluno_id}</strong></td>
+                <td>{escape(nome_aluno)}</td>
+                <td class="text-center">{media_badge}</td>
+            </tr>
+        """
+    
+    ranking_html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    
+    # Botão voltar
+    voltar_html = f"""
+    <div style="margin-top: 20px;">
+        <a href="{url_for('gerenciar_turma', turma_id=turma_id, disciplina_id=disciplina_id)}" class="btn-voltar">
+            &laquo; Voltar para Gestão
+        </a>
+    </div>
+    """
+    
+    html = f"""
+    {relatorio_css}
+    {header_html}
+    {stats_html}
+    {ranking_html}
+    {voltar_html}
+    """
     
     return render_base(html, "Relatório de Desempenho")
 

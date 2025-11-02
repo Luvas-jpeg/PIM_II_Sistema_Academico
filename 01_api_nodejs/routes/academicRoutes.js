@@ -30,6 +30,22 @@ router.get(
     academicController.getProfessorTurmas
 );
 
+// Rota para associar professor diretamente a uma disciplina específica dentro de uma turma
+// DEVE VIR ANTES das rotas mais genéricas de /turmas
+// Suporta tanto PUT quanto POST para maior compatibilidade
+router.put(
+    '/turmas/:turma_id/disciplinas/:disciplina_id/professor',
+    academicMiddleware.isAuthenticated,
+    academicMiddleware.isAdmin,
+    academicController.assignProfessorToDisciplina
+);
+router.post(
+    '/turmas/:turma_id/disciplinas/:disciplina_id/professor',
+    academicMiddleware.isAuthenticated,
+    academicMiddleware.isAdmin,
+    academicController.assignProfessorToDisciplina
+);
+
 // Suporta PUT (usado pelo frontend) e POST - mantemos PUT para compatibilidade
 router.put(
     '/turmas/atribuir-professor',
@@ -99,7 +115,7 @@ router.post(
     academicMiddleware.isAuthenticated,
     academicMiddleware.isProfessorOrAdmin,
     academicController.lancarNota
-)
+);
 router.delete(
     '/disciplinas/:disciplina_id/notas', // Ex: DELETE /api/academico/disciplinas/1/notas
     academicMiddleware.isAuthenticated,

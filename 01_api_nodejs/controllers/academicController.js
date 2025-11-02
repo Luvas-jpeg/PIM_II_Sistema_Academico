@@ -95,6 +95,272 @@ const assignProfessorToTurma = async (req, res) => {
     }
 };
 
+// Associa um professor específico a uma disciplina específica dentro de uma turma
+const assignProfessorToDisciplina = async (req, res) => {
+    console.log('[AssignProfDisciplina] Função chamada!');
+    console.log('[AssignProfDisciplina] Params:', req.params);
+    console.log('[AssignProfDisciplina] Body:', req.body);
+    
+    // Permissão: Apenas Administradores
+    if (req.user.tipo_usuario !== 'admin') {
+        return res.status(403).json({ message: 'Acesso negado. Apenas administradores podem atribuir professores a disciplinas.' });
+    }
+
+    const turma_id = parseInt(req.params.turma_id);
+    const disciplina_id = parseInt(req.params.disciplina_id);
+    const { professor_id } = req.body;
+
+    console.log(`[AssignProfDisciplina] Recebido: turma_id=${turma_id}, disciplina_id=${disciplina_id}, professor_id=${professor_id}`);
+
+    if (!professor_id || !turma_id || !disciplina_id) {
+        return res.status(400).json({ message: 'IDs de Turma, Disciplina e Professor são obrigatórios.' });
+    }
+
+    // IMPORTANTE: Criar a coluna professor_id ANTES de iniciar a transação
+    // Isso garante que a coluna exista mesmo se a transação fizer rollback
+    console.log('[AssignProfDisciplina] VERIFICAÇÃO PRÉ-TRANSAÇÃO: Garantindo que a coluna professor_id existe...');
+    
+    try {
+        // Usa uma query direta (sem transação) para verificar/criar a coluna
+        const checkColumn = await db.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'turma_disciplinas' 
+            AND column_name = 'professor_id'
+        `);
+        
+        if (checkColumn.rows.length === 0) {
+            console.log('[AssignProfDisciplina] Coluna não existe, criando FORA da transação...');
+            try {
+                // Tenta usar IF NOT EXISTS (PostgreSQL 9.5+)
+                try {
+                    await db.query(`
+                        ALTER TABLE turma_disciplinas 
+                        ADD COLUMN IF NOT EXISTS professor_id INTEGER
+                    `);
+                    console.log('[AssignProfDisciplina] Coluna criada com sucesso usando IF NOT EXISTS (fora da transação)!');
+                } catch (ifNotExistsError) {
+                    // Se IF NOT EXISTS não for suportado ou der outro erro, tenta sem ele
+                    if (ifNotExistsError.message && ifNotExistsError.message.includes('syntax error')) {
+                        console.log('[AssignProfDisciplina] IF NOT EXISTS não suportado, tentando sem ele...');
+                        // Versão antiga do PostgreSQL - cria sem IF NOT EXISTS e trata erro se já existir
+                        try {
+                            await db.query(`
+                                ALTER TABLE turma_disciplinas 
+                                ADD COLUMN professor_id INTEGER
+                            `);
+                            console.log('[AssignProfDisciplina] Coluna criada com sucesso (sem IF NOT EXISTS)!');
+                        } catch (createError) {
+                            if (createError.message && (
+                                createError.message.includes('already exists') || 
+                                createError.message.includes('duplicate column') ||
+                                createError.code === '42701'
+                            )) {
+                                console.log('[AssignProfDisciplina] Coluna já existe (erro esperado).');
+                            } else {
+                                throw createError;
+                            }
+                        }
+                    } else {
+                        // Outro tipo de erro
+                        if (ifNotExistsError.message && (
+                            ifNotExistsError.message.includes('already exists') || 
+                            ifNotExistsError.message.includes('duplicate column') ||
+                            ifNotExistsError.code === '42701'
+                        )) {
+                            console.log('[AssignProfDisciplina] Coluna já existe (detectado pelo erro).');
+                        } else {
+                            throw ifNotExistsError;
+                        }
+                    }
+                }
+                
+                // Tenta adicionar FK depois
+                try {
+                    // Tenta com IF NOT EXISTS primeiro
+                    await db.query(`
+                        ALTER TABLE turma_disciplinas 
+                        ADD CONSTRAINT IF NOT EXISTS fk_turma_disciplinas_professor 
+                        FOREIGN KEY (professor_id) 
+                        REFERENCES usuarios(id_usuario)
+                    `);
+                    console.log('[AssignProfDisciplina] Foreign key criada com sucesso!');
+                } catch (fkError) {
+                    // Se IF NOT EXISTS não for suportado, tenta sem ele
+                    if (fkError.message && fkError.message.includes('syntax error')) {
+                        try {
+                            await db.query(`
+                                ALTER TABLE turma_disciplinas 
+                                ADD CONSTRAINT fk_turma_disciplinas_professor 
+                                FOREIGN KEY (professor_id) 
+                                REFERENCES usuarios(id_usuario)
+                            `);
+                            console.log('[AssignProfDisciplina] FK criada sem IF NOT EXISTS!');
+                        } catch (fkError2) {
+                            if (fkError2.message && (
+                                fkError2.message.includes('already exists') ||
+                                fkError2.code === '42710'
+                            )) {
+                                console.log('[AssignProfDisciplina] FK já existe, continuando...');
+                            } else {
+                                console.warn('[AssignProfDisciplina] Aviso ao criar FK (mas continuando):', fkError2.message);
+                            }
+                        }
+                    } else if (fkError.message && (
+                        fkError.message.includes('already exists') ||
+                        fkError.code === '42710'
+                    )) {
+                        console.log('[AssignProfDisciplina] FK já existe, continuando...');
+                    } else {
+                        console.warn('[AssignProfDisciplina] Aviso ao criar FK (mas continuando):', fkError.message);
+                    }
+                }
+            } catch (createError) {
+                // Se der erro, verifica se é porque já existe
+                if (createError.message && (
+                    createError.message.includes('already exists') || 
+                    createError.message.includes('duplicate column') ||
+                    createError.code === '42701'
+                )) {
+                    console.log('[AssignProfDisciplina] Coluna já existe (detectado pelo erro).');
+                } else {
+                    console.error('[AssignProfDisciplina] ERRO ao criar coluna (fora da transação):', createError);
+                    return res.status(500).json({ 
+                        message: 'Erro ao preparar tabela para associação de professor',
+                        error: createError.message 
+                    });
+                }
+            }
+        } else {
+            console.log('[AssignProfDisciplina] Coluna professor_id já existe.');
+        }
+    } catch (prepError) {
+        console.error('[AssignProfDisciplina] Erro na preparação pré-transação:', prepError);
+        // Continua mesmo se der erro na verificação (pode ser que não tenha permissão para verificar)
+    }
+    
+    const client = await db.getClient();
+    
+    try {
+        await client.query('BEGIN');
+
+        // 1. Verificar se o professor existe e é do tipo 'professor'
+        const professorCheck = await client.query(
+            'SELECT tipo_usuario FROM usuarios WHERE id_usuario = $1', [professor_id]
+        );
+        if (professorCheck.rows.length === 0 || professorCheck.rows[0].tipo_usuario !== 'professor') {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ 
+                message: 'ID do Professor não encontrado ou usuário não é do tipo "professor".'
+            });
+        }
+
+        // 2. Verificar se a turma existe
+        const turmaCheck = await client.query('SELECT turma_id FROM turmas WHERE turma_id = $1', [turma_id]);
+        if (turmaCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Turma não encontrada.' });
+        }
+
+        // 3. Verificar se a disciplina existe
+        const discCheck = await client.query('SELECT disciplina_id FROM disciplinas WHERE disciplina_id = $1', [disciplina_id]);
+        if (discCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Disciplina não encontrada.' });
+        }
+
+        // 4. Verificar se a associação turma-disciplina existe na tabela turma_disciplinas
+        const turmaDiscCheck = await client.query(
+            'SELECT turma_disciplina_id FROM turma_disciplinas WHERE turma_id = $1 AND disciplina_id = $2',
+            [turma_id, disciplina_id]
+        );
+
+        if (turmaDiscCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ 
+                message: 'A disciplina não está associada a esta turma. Associe a disciplina à turma primeiro.' 
+            });
+        }
+
+        // 5. Verificar novamente (dentro da transação) que a coluna existe antes do UPDATE
+        // Nota: A coluna já deveria ter sido criada antes da transação, mas verificamos aqui por segurança
+        console.log('[AssignProfDisciplina] Verificando que a coluna existe antes do UPDATE...');
+        
+        const verifyColumn = await client.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'turma_disciplinas' 
+            AND column_name = 'professor_id'
+        `);
+        
+        if (verifyColumn.rows.length === 0) {
+            await client.query('ROLLBACK');
+            console.error('[AssignProfDisciplina] ERRO CRÍTICO: Coluna professor_id não existe mesmo após tentativa de criação!');
+            return res.status(500).json({ 
+                message: 'Erro interno: A coluna professor_id não foi criada corretamente. Tente novamente.',
+                error: 'Column professor_id does not exist'
+            });
+        }
+        
+        console.log('[AssignProfDisciplina] Coluna verificada e existe! Prosseguindo com UPDATE...');
+        
+        // 6. Atualizar o professor_id na tabela turma_disciplinas
+        console.log('[AssignProfDisciplina] Atualizando professor_id...');
+        const updateSql = `
+            UPDATE turma_disciplinas 
+            SET professor_id = $1 
+            WHERE turma_id = $2 AND disciplina_id = $3
+            RETURNING turma_disciplina_id
+        `;
+        
+        const result = await client.query(updateSql, [professor_id, turma_id, disciplina_id]);
+        
+        if (result.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ 
+                message: 'Associação turma-disciplina não encontrada. Certifique-se de que a disciplina está associada à turma primeiro.' 
+            });
+        }
+
+        await client.query('COMMIT');
+        console.log('[AssignProfDisciplina] Atualização concluída com sucesso!');
+        
+        res.status(200).json({
+            message: `Professor ${professor_id} associado à disciplina ${disciplina_id} na turma ${turma_id} com sucesso!`,
+            turma_id: turma_id,
+            disciplina_id: disciplina_id,
+            professor_id: professor_id
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('[AssignProfDisciplina] Erro capturado:', error);
+        console.error('[AssignProfDisciplina] Stack:', error.stack);
+        console.error('[AssignProfDisciplina] Mensagem:', error.message);
+        
+        // Mensagens de erro mais específicas
+        let errorMessage = 'Erro ao associar professor à disciplina';
+        if (error.message && error.message.includes('foreign key')) {
+            errorMessage = 'Erro de integridade: Verifique se o professor existe no sistema.';
+        } else if (error.message && error.message.includes('violates not-null constraint')) {
+            errorMessage = 'Erro: Um dos campos obrigatórios não foi fornecido corretamente.';
+        } else if (error.message) {
+            errorMessage = `Erro: ${error.message}`;
+        }
+        
+        res.status(500).json({ 
+            message: errorMessage, 
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+};
 
 exports.assignDisciplinasToTurma = async (req, res) => {
     // Permissão: Apenas Administradores
@@ -213,10 +479,14 @@ const getProfessorTurmas = async (req, res) => {
     // O ID do professor vem do token JWT decodificado pelo middleware
     const professor_id = req.user.id; 
 
+    console.log(`[GetProfessorTurmas] Buscando turmas e disciplinas para professor_id: ${professor_id}`);
+
     try {
-        // ⚠️ CORREÇÃO SQL: Usamos um JOIN para buscar as disciplinas ligadas
+        // ⚠️ CORREÇÃO SQL: Agora busca disciplinas da tabela turma_disciplinas
+        // Considera tanto disciplinas associadas diretamente ao professor (turma_disciplinas.professor_id)
+        // quanto disciplinas de turmas onde o professor é responsável (turmas.professor_id)
         const sql = `
-            SELECT 
+            SELECT DISTINCT
                 t.turma_id, 
                 t.nome_turma, 
                 t.ano, 
@@ -224,30 +494,74 @@ const getProfessorTurmas = async (req, res) => {
                 d.nome_disciplina
             FROM 
                 turmas t
-            -- Usamos INNER JOIN para garantir que só turmas com matrículas apareçam
             INNER JOIN 
-                matriculas m ON t.turma_id = m.turma_id
+                turma_disciplinas td ON t.turma_id = td.turma_id
             INNER JOIN 
-                disciplinas d ON m.disciplina_id = d.disciplina_id
+                disciplinas d ON td.disciplina_id = d.disciplina_id
             WHERE 
-                t.professor_id = $1
-            GROUP BY 
-                t.turma_id, t.nome_turma, t.ano, d.disciplina_id, d.nome_disciplina
+                -- O professor pode ver disciplinas se:
+                -- 1. A disciplina está associada diretamente a ele na tabela turma_disciplinas
+                -- 2. OU a turma tem ele como professor responsável (compatibilidade com sistema antigo)
+                (td.professor_id = $1 OR t.professor_id = $1)
             ORDER BY 
-                t.ano DESC, t.nome_turma ASC;
+                t.ano DESC, t.nome_turma ASC, d.nome_disciplina ASC;
         `;
 
         const params = [professor_id];
         
+        console.log(`[GetProfessorTurmas] Executando query com params:`, params);
         const result = await db.query(sql, params);
+        
+        console.log(`[GetProfessorTurmas] Resultado: ${result.rows.length} disciplinas encontradas`);
 
         res.status(200).json({
             message: 'Turmas do professor carregadas com sucesso!',
             turmas: result.rows
         });
     } catch (error) {
-        console.error('Erro ao listar turmas do professor:', error);
-        res.status(500).json({ message: 'Erro no servidor', error: error.message });
+        console.error('[GetProfessorTurmas] Erro ao listar turmas do professor:', error);
+        console.error('[GetProfessorTurmas] Stack:', error.stack);
+        
+        // Se der erro de coluna não existe, tenta query alternativa
+        if (error.message && error.message.includes('professor_id') && error.message.includes('does not exist')) {
+            console.log('[GetProfessorTurmas] Coluna professor_id não existe, usando query alternativa...');
+            
+            try {
+                // Query alternativa: busca apenas por professor_id da turma (sistema antigo)
+                const sqlAlternative = `
+                    SELECT DISTINCT
+                        t.turma_id, 
+                        t.nome_turma, 
+                        t.ano, 
+                        d.disciplina_id, 
+                        d.nome_disciplina
+                    FROM 
+                        turmas t
+                    INNER JOIN 
+                        turma_disciplinas td ON t.turma_id = td.turma_id
+                    INNER JOIN 
+                        disciplinas d ON td.disciplina_id = d.disciplina_id
+                    WHERE 
+                        t.professor_id = $1
+                    ORDER BY 
+                        t.ano DESC, t.nome_turma ASC, d.nome_disciplina ASC;
+                `;
+                
+                const result = await db.query(sqlAlternative, [professor_id]);
+                
+                res.status(200).json({
+                    message: 'Turmas do professor carregadas com sucesso!',
+                    turmas: result.rows
+                });
+            } catch (altError) {
+                res.status(500).json({ 
+                    message: 'Erro no servidor ao buscar turmas do professor', 
+                    error: altError.message 
+                });
+            }
+        } else {
+            res.status(500).json({ message: 'Erro no servidor', error: error.message });
+        }
     }
 };
 
@@ -928,17 +1242,44 @@ const assignDisciplinasToTurma = async (req, res) => {
 
         let insercoesRealizadas = 0;
         let disciplinasInvalidas = [];
+        let disciplinasJaAssociadas = [];
+        let disciplinasNomes = {}; // Para armazenar nomes das disciplinas
 
         // 2. Loop para inserir cada disciplina
         for (const disciplina_id of disciplina_ids) {
-            //  LOG 3: Processando cada disciplina_id
+            // Converter para número se necessário
+            const discId = parseInt(disciplina_id);
+            
+            console.log(`[AssignDisciplinas] Processando disciplina_id: ${discId} (tipo: ${typeof discId})`);
 
-            // Validar se a disciplina existe
-            const discCheck = await client.query('SELECT disciplina_id FROM disciplinas WHERE disciplina_id = $1', [disciplina_id]);
+            // Validar se a disciplina existe e obter o nome
+            const discCheck = await client.query(
+                'SELECT disciplina_id, nome_disciplina FROM disciplinas WHERE disciplina_id = $1', 
+                [discId]
+            );
     
             if (discCheck.rows.length === 0) {
-                disciplinasInvalidas.push(disciplina_id);
+                console.log(`[AssignDisciplinas] Disciplina ${discId} não encontrada no banco`);
+                disciplinasInvalidas.push(discId);
                 continue; 
+            }
+
+            // Armazena o nome da disciplina para usar depois
+            disciplinasNomes[discId] = discCheck.rows[0].nome_disciplina;
+            
+            // Verifica se a associação já existe ANTES de tentar inserir
+            const checkExiste = await client.query(
+                'SELECT turma_disciplina_id FROM turma_disciplinas WHERE turma_id = $1 AND disciplina_id = $2',
+                [turma_id, discId]
+            );
+            
+            if (checkExiste.rows.length > 0) {
+                console.log(`[AssignDisciplinas] Disciplina ${discId} já está associada à turma ${turma_id}`);
+                disciplinasJaAssociadas.push({
+                    id: discId,
+                    nome: disciplinasNomes[discId]
+                });
+                continue; // Pula para a próxima disciplina
             }
             
             // Tenta inserir na tabela turma_disciplinas
@@ -948,28 +1289,51 @@ const assignDisciplinasToTurma = async (req, res) => {
                 ON CONFLICT (turma_id, disciplina_id) DO NOTHING
                 RETURNING turma_disciplina_id; 
             `;
-            const result = await client.query(insertSql, [turma_id, disciplina_id]);
+            const result = await client.query(insertSql, [turma_id, discId]);
             
             if (result.rowCount > 0) {
                 insercoesRealizadas++;
+                console.log(`[AssignDisciplinas] Disciplina ${discId} associada com sucesso!`);
+            } else {
+                // Se não inseriu mas não estava na verificação, algo estranho aconteceu
+                console.warn(`[AssignDisciplinas] Disciplina ${discId} não foi inserida (provavelmente conflito não detectado)`);
             }
         }
 
         await client.query('COMMIT'); 
-        console.log(`[AssignDisciplinas] COMMIT realizado. Inserções: ${insercoesRealizadas}`);
+        console.log(`[AssignDisciplinas] COMMIT realizado. Inserções: ${insercoesRealizadas}, Já associadas: ${disciplinasJaAssociadas.length}, Inválidas: ${disciplinasInvalidas.length}`);
 
-        // 👇 CORREÇÃO: Defina a variável antes de usá-la 👇
-        let finalResponseMessage = `${insercoesRealizadas} nova(s) disciplina(s) associada(s) à Turma ${turma_id}.`;
+        // Monta mensagem detalhada
+        let finalResponseMessage = '';
+        
+        if (insercoesRealizadas > 0) {
+            finalResponseMessage = `✅ ${insercoesRealizadas} nova(s) disciplina(s) associada(s) à Turma ${turma_id}.`;
+        } else {
+            finalResponseMessage = `ℹ️ Nenhuma nova disciplina foi associada à Turma ${turma_id}.`;
+        }
+        
+        if (disciplinasJaAssociadas.length > 0) {
+            const nomesJaAssociadas = disciplinasJaAssociadas.map(d => `${d.nome} (ID: ${d.id})`).join(', ');
+            finalResponseMessage += `\n⚠️ Disciplina(s) que já estavam associadas: ${nomesJaAssociadas}.`;
+        }
+        
         if (disciplinasInvalidas.length > 0) {
-            // Use a variável definida acima
-            finalResponseMessage += ` IDs de disciplinas inválidos ignorados: ${disciplinasInvalidas.join(', ')}.`; 
+            finalResponseMessage += `\n❌ IDs de disciplinas inválidos ignorados: ${disciplinasInvalidas.join(', ')}.`;
+        }
+
+        // Se não houve nenhuma ação efetiva, avisa o usuário
+        if (insercoesRealizadas === 0 && disciplinasJaAssociadas.length === 0 && disciplinasInvalidas.length === 0) {
+            finalResponseMessage = `⚠️ Nenhuma disciplina foi processada. Verifique se os IDs estão corretos.`;
         }
 
         // Use a variável correta na resposta JSON
         res.status(200).json({
-            message: finalResponseMessage, // ⬅️ Variável corrigida aqui
+            message: finalResponseMessage,
             turma_id: turma_id,
-            disciplinas_processadas: disciplina_ids
+            disciplinas_processadas: disciplina_ids,
+            insercoes: insercoesRealizadas,
+            ja_associadas: disciplinasJaAssociadas.length,
+            invalidas: disciplinasInvalidas.length
         });
 
     } catch (error) {
@@ -1062,6 +1426,7 @@ module.exports = {
     createTurma,
     createTurmaWithDisciplinas,
     assignProfessorToTurma,
+    assignProfessorToDisciplina,
     getAllTurmas,
     getProfessorTurmas,
     createDisciplina,
