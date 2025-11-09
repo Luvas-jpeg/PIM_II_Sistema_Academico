@@ -474,7 +474,7 @@ Este projeto foi desenvolvido para fins acadêmicos como parte do Projeto Integr
 
 ##  Autores
 
-- **Desenvolvedor Principal**: 
+- **Desenvolvedores**: 
 - Lucas Vinícios Martins Alves - R6602G9
 - Letícia Mocci Dezanete R.A H765GB8
 - Arthur Lucio Parmezan - H70FDH6
@@ -482,15 +482,3 @@ Este projeto foi desenvolvido para fins acadêmicos como parte do Projeto Integr
 - Luan Alves Magalhães - H659IA0
 - **Instituição**: UNIP - Universidade Paulista
 - **Ano**: 2025
-
----
-
-##  Contato
-
-Para dúvidas ou suporte, entre em contato através do email: [seu-email@exemplo.com]
-
----
-
-**Versão**: 1.0.0  
-**Última Atualização**: Janeiro 2025
-
