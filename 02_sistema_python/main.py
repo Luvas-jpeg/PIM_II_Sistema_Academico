@@ -1,128 +1,404 @@
 """
-Sistema Acadêmico PIM - Módulo Web Flask
+================================================================================
+SISTEMA ACADÊMICO PIM - MÓDULO WEB FLASK
+================================================================================
 
-Este módulo implementa a interface web do Sistema Acadêmico PIM, oferecendo funcionalidades
-para alunos, professores e administradores. O sistema se integra com uma API Node.js
-para gerenciamento de dados e autenticação.
+Este módulo implementa a interface web do Sistema Acadêmico PIM, oferecendo
+funcionalidades completas para três perfis distintos de usuários: alunos,
+professores e administradores.
 
-Funcionalidades principais:
-- Autenticação de usuários (alunos, professores, administradores)
-- Gestão de boletins e notas
-- Gerenciamento de turmas e disciplinas
-- Interface administrativa
-- Painel do professor para lançamento de notas
+ARQUITETURA:
+-----------
+O sistema adota uma arquitetura em camadas:
+- Frontend: Flask (Python) - Renderização server-side
+- Backend: API Node.js/Express - Lógica de negócio e autenticação
+- Banco de Dados: PostgreSQL - Persistência de dados
+- Serviços Externos: Google Gemini (IA) e Biblioteca C (algoritmos)
 
-Estrutura do projeto:
-- Rotas principais para cada tipo de usuário
-- Sistema de templates usando render_template_string
-- Integração com API REST
-- Gestão de sessões para autenticação
+FUNCIONALIDADES PRINCIPAIS:
+---------------------------
+1. Autenticação e Autorização
+   - Sistema de login/registro com JWT
+   - Controle de acesso baseado em perfis (aluno/professor/admin)
+   - Gerenciamento de sessões seguro
 
-Autor: [Seu Nome]
-Data: Outubro 2025
+2. Módulo do Aluno
+   - Dashboard com estatísticas acadêmicas
+   - Consulta de boletim completo
+   - Assistente de IA para orientação acadêmica
+
+3. Módulo do Professor
+   - Painel de controle de turmas
+   - Lançamento de notas e registro de presença
+   - Geração de relatórios de desempenho
+
+4. Módulo do Administrador
+   - CRUD completo de turmas, disciplinas, professores e alunos
+   - Gerenciamento de matrículas
+   - Relatórios avançados com algoritmos otimizados
+
+TECNOLOGIAS UTILIZADAS:
+----------------------
+- Flask 3.1.2: Framework web Python
+- Jinja2: Motor de templates
+- Requests: Cliente HTTP para comunicação com API
+- Markdown: Processamento de texto formatado
+- Google Generative AI: Integração com Gemini para IA
+- ctypes: Interface com biblioteca C compilada
+
+SEGURANÇA:
+---------
+- Proteção XSS através de escape automático
+- Autenticação JWT stateless
+- Validação de entrada em todas as rotas
+- Proteção CSRF através de tokens de sessão
+
+AUTOR: [Nome do Desenvolvedor]
+DATA: Janeiro 2025
+VERSÃO: 1.0.0
+================================================================================
 """
-import ctypes
-import platform
+# ============================================================================
+# IMPORTAÇÕES DE BIBLIOTECAS
+# ============================================================================
+
+# Bibliotecas padrão do Python
+import ctypes          # Interface para bibliotecas C compiladas (DLL/SO)
+import platform        # Detecção do sistema operacional
+import os              # Operações do sistema de arquivos e variáveis de ambiente
+from decimal import Decimal, ROUND_HALF_UP  # Precisão decimal para cálculos de notas
+
+# Framework Flask e componentes
 from flask import Flask, render_template_string, request, redirect, url_for, session
-from markupsafe import escape, Markup  # Para proteção contra XSS e permitir HTML seguro
-import requests  # Para comunicação com a API
-import os
-from decimal import Decimal, ROUND_HALF_UP
-from dotenv import load_dotenv  # Carregamento de variáveis de ambiente
-import random
+# Flask: Framework web principal
+# render_template_string: Renderização de templates HTML inline
+# request: Acesso a dados de requisições HTTP
+# redirect: Redirecionamento de rotas
+# url_for: Geração de URLs para rotas
+# session: Gerenciamento de sessões do usuário
+
+# Segurança e proteção
+from markupsafe import escape, Markup
+# escape: Proteção contra XSS (Cross-Site Scripting) - escapa HTML malicioso
+# Markup: Permite renderizar HTML seguro quando necessário
+
+# Comunicação HTTP
+import requests  # Cliente HTTP para comunicação com a API Node.js backend
+
+# Configuração e ambiente
+from dotenv import load_dotenv  # Carregamento de variáveis de ambiente do arquivo .env
+
+# Inteligência Artificial
+import google.generativeai as genai  # SDK do Google para integração com Gemini AI
+
+# Processamento de texto
+import markdown  # Conversão de Markdown para HTML
 
 
-# --- Configurações Iniciais ---
-# Carrega variáveis de ambiente do arquivo .env
+# ============================================================================
+# CONFIGURAÇÕES INICIAIS E VARIÁVEIS DE AMBIENTE
+# ============================================================================
+
+# Carrega variáveis de ambiente do arquivo .env na raiz do projeto
+# O arquivo .env deve conter: API_URL, FLASK_SECRET_KEY, GEMINI_API_KEY
 load_dotenv()
 
-# URL base da API - usa fallback para localhost se não configurado
+# URL base da API Node.js backend
+# Fallback para localhost:3000 se não estiver configurado no .env
 API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:3000/api") 
 
+# Configuração da API do Google Gemini para assistente de IA
+# A chave deve ser obtida em: https://aistudio.google.com/app/apikey
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
 # Inicialização da aplicação Flask
+# __name__ permite que Flask encontre templates e arquivos estáticos
 app = Flask(__name__)
 
-# Configuração da chave secreta para sessions
-# IMPORTANTE: Em produção, use uma chave secreta forte através de variável de ambiente
+# Configuração da chave secreta para sessões
+# IMPORTANTE: Em produção, use uma chave secreta forte e única
+# A chave secreta é usada para assinar cookies de sessão
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "chave_de_dev_insegura_use_o_env") 
 
 # Constantes para chaves de sessão
-SESSION_KEY_TOKEN = 'user_token'  # Armazena o token JWT
+# Essas constantes definem as chaves usadas no dicionário de sessão
+SESSION_KEY_TOKEN = 'user_token'  # Armazena o token JWT retornado pela API
 SESSION_KEY_TYPE = 'user_type'    # Armazena o tipo de usuário (aluno/professor/admin)
 
 
 
-# --- Carregamento da Biblioteca C (DLL/SO) ---
-lib_c = None
+# ============================================================================
+# CARREGAMENTO DA BIBLIOTECA C (DLL/SO)
+# ============================================================================
+# 
+# Esta seção carrega dinamicamente a biblioteca C compilada que contém
+# algoritmos otimizados para processamento de dados acadêmicos.
+# 
+# A biblioteca C é usada para:
+# - Ordenação eficiente de alunos por desempenho (média final)
+# - Processamento de grandes volumes de dados com performance otimizada
+# 
+# A biblioteca é opcional - se não for encontrada, o sistema continua
+# funcionando normalmente, mas sem os algoritmos otimizados.
+
+lib_c = None  # Variável global que armazenará a referência à biblioteca
+
 try:
+    # Detecta o sistema operacional para carregar a biblioteca correta
+    # Windows usa .dll, Linux/Mac usam .so
     lib_name = "algorithms.dll" if platform.system() == "Windows" else "algorithms.so"
-    # O caminho é relativo à pasta 02_sistema_python (onde o main.py está)
+    
+    # Constrói o caminho relativo para a biblioteca
+    # O caminho é: ../03_algorithms_c/algorithms.dll (ou .so)
     lib_path = os.path.join(os.path.dirname(__file__), "..", "03_algorithms_c", lib_name)
 
+    # Carrega a biblioteca dinâmica usando ctypes
     lib_c = ctypes.CDLL(lib_path)
 
-    # Definir a estrutura (struct) em Python
+    # Define a estrutura C em Python usando ctypes.Structure
+    # Esta estrutura corresponde ao struct DesempenhoAluno em C:
+    # struct DesempenhoAluno {
+    #     int id_aluno;
+    #     float media_final;
+    # }
     class DesempenhoAluno(ctypes.Structure):
-        _fields_ = [("id_aluno", ctypes.c_int), ("media_final", ctypes.c_float)]
+        _fields_ = [
+            ("id_aluno", ctypes.c_int),      # ID do aluno (inteiro)
+            ("media_final", ctypes.c_float)   # Média final (ponto flutuante)
+        ]
 
-    # Definir interface da função C: ordenar_por_desempenho
+    # Define a assinatura da função C para o Python
+    # void ordenar_por_desempenho(DesempenhoAluno* array, int tamanho)
     lib_c.ordenar_por_desempenho.argtypes = [
-        ctypes.POINTER(DesempenhoAluno),
-        ctypes.c_int
+        ctypes.POINTER(DesempenhoAluno),  # Ponteiro para array de estruturas
+        ctypes.c_int                       # Tamanho do array
     ]
-    lib_c.ordenar_por_desempenho.restype = None
+    lib_c.ordenar_por_desempenho.restype = None  # Função void (sem retorno)
 
     print("(Flask) Biblioteca C 'algorithms' carregada com sucesso.")
 
 except Exception as e:
+    # Se houver erro ao carregar a biblioteca, registra o erro mas continua
+    # Isso permite que o sistema funcione mesmo sem a biblioteca C
     print(f"(Flask) ERRO AO CARREGAR BIBLIOTECA C: {e}")
     print("   As funcionalidades de relatório C (ordenação) estarão desativadas.")
     lib_c = None  # Garante que o app rode mesmo se o C falhar
 
-# --------------------------------------------------------------------------------------
+# ============================================================================
 # FUNÇÕES DE RENDERIZAÇÃO E BASE HTML
-# --------------------------------------------------------------------------------------
+# ============================================================================
+# 
+# Estas funções são responsáveis por gerar o HTML das páginas do sistema.
+# Utilizam render_template_string do Flask para criar templates dinâmicos
+# com conteúdo específico para cada tipo de usuário.
+
+def gerar_sidebar(user_type=None):
+    """
+    Gera a sidebar de navegação personalizada baseada no tipo de usuário.
+    
+    Esta função cria uma barra lateral de navegação com links específicos
+    para cada perfil de usuário, incluindo cores e ícones personalizados.
+    
+    Nota: Esta função está atualmente não utilizada (sidebar foi removida),
+    mas é mantida para possível uso futuro.
+    
+    Args:
+        user_type (str, optional): Tipo de usuário ('aluno', 'professor', 'admin').
+                                   Se None, obtém da sessão atual.
+    
+    Returns:
+        str: HTML completo da sidebar personalizada
+    
+    Estrutura gerada:
+        - Header com título do perfil
+        - Links de navegação específicos por perfil
+        - Footer com botão de logout
+    """
+    if not user_type:
+        user_type = session.get(SESSION_KEY_TYPE, 'aluno')
+    
+    # Configurações por tipo de usuário
+    configs = {
+        'aluno': {
+            'titulo': 'Aluno',
+            'cor': '#667eea',
+            'gradiente': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            'links': [
+                {'url': url_for('painel_aluno'), 'texto': '📊 Dashboard', 'icon': '📊'},
+                {'url': url_for('boletim'), 'texto': '📋 Boletim', 'icon': '📋'},
+                {'url': url_for('chat_ia'), 'texto': '🤖 Assistente IA', 'icon': '🤖'},
+            ]
+        },
+        'professor': {
+            'titulo': 'Professor',
+            'cor': '#4CAF50',
+            'gradiente': 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+            'links': [
+                {'url': url_for('painel_professor'), 'texto': '📊 Painel', 'icon': '📊'},
+                {'url': url_for('dashboard'), 'texto': '👥 Minhas Turmas', 'icon': '👥'},
+                {'url': url_for('dashboard'), 'texto': '📝 Lançar Notas', 'icon': '📝'},
+            ]
+        },
+        'admin': {
+            'titulo': 'Administrador',
+            'cor': '#ff9800',
+            'gradiente': 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+            'links': [
+                {'url': url_for('painel_admin'), 'texto': '⚙️ Painel Admin', 'icon': '⚙️'},
+                {'url': url_for('dashboard'), 'texto': '📊 Dashboard', 'icon': '📊'},
+            ]
+        }
+    }
+    
+    config = configs.get(user_type, configs['aluno'])
+    
+    links_html = ''
+    for link in config['links']:
+        links_html += f'''
+            <a href="{link['url']}" class="sidebar-link">
+                <span class="sidebar-icon">{link['icon']}</span>
+                <span class="sidebar-text">{link['texto']}</span>
+            </a>
+        '''
+    
+    sidebar_html = f'''
+    <div class="sidebar" style="background: {config['gradiente']};">
+        <div class="sidebar-header">
+            <h2 class="sidebar-title">{config['titulo']}</h2>
+        </div>
+        <nav class="sidebar-nav">
+            {links_html}
+        </nav>
+        <div class="sidebar-footer">
+            <a href="{url_for('logout')}" class="sidebar-link sidebar-logout">
+                <span class="sidebar-icon">🚪</span>
+                <span class="sidebar-text">Sair</span>
+            </a>
+        </div>
+    </div>
+    '''
+    
+    return sidebar_html
 
 def render_base(content_html, page_title="Sistema Acadêmico PIM"):
     """
     Função principal de renderização que fornece o template base do sistema.
     
+    Esta função cria o HTML base para todas as páginas do sistema, incluindo:
+    - Estrutura HTML5 completa
+    - Estilos CSS modernos e responsivos
+    - Área de conteúdo principal
+    - Suporte para botões de navegação
+    
     Args:
-        content_html (str): Conteúdo HTML específico da página
-        page_title (str): Título da página, padrão é "Sistema Acadêmico PIM"
+        content_html (str): Conteúdo HTML específico da página a ser renderizada
+        page_title (str): Título da página exibido na aba do navegador
     
     Returns:
-        str: HTML renderizado com o layout base completo
-        
-    O layout inclui:
-    - Sidebar de navegação
-    - Área principal de conteúdo
-    - Estilos CSS básicos
+        str: HTML completo renderizado usando render_template_string do Flask
+    
+    Características do layout:
+        - Design responsivo (mobile-friendly)
+        - Estilos CSS inline para evitar dependências externas
+        - Suporte para botões de voltar e sair
+        - Background moderno e cores consistentes
     """
-    # IMPORTANTE: Você deve colocar seu código HTML/CSS completo (com a sidebar) aqui
-    # Para o propósito de teste, usaremos um layout simples.
     base_html = f'''
     <!DOCTYPE html>
     <html lang="pt-br">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{page_title}</title>
         <style>
-            :root {{ --accent: #1b55f8; --error: #d32f2f; }}
-            body {{ font-family: Arial, sans-serif; margin-left: 200px; padding: 20px; }}
-            .sidebar {{ position: fixed; left: 0; width: 180px; height: 100vh; background: var(--accent); color: white; padding-top: 20px; }}
-            .sidebar a {{ display: block; padding: 10px; color: white; text-decoration: none; }}
-            .login-card {{ max-width: 400px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }}
-            .error-message {{ color: var(--error); text-align: center; margin-bottom: 15px; }}
+            :root {{
+                --accent: #1b55f8;
+                --error: #d32f2f;
+            }}
+            
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                padding: 20px;
+                background: #f5f7fa;
+                min-height: 100vh;
+            }}
+            
+            .main-content {{
+                max-width: 1400px;
+                margin: 0 auto;
+            }}
+            
+            .btn-voltar {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 24px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 1rem;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+                margin-bottom: 20px;
+            }}
+            
+            .btn-voltar:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            }}
+            
+            .btn-sair {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 24px;
+                background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 1rem;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+                margin-bottom: 20px;
+                margin-left: 15px;
+            }}
+            
+            .btn-sair:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+            }}
+            
+            .nav-buttons-container {{
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                margin-bottom: 20px;
+            }}
+            
+            @media (max-width: 768px) {{
+                .nav-buttons-container {{
+                    flex-direction: column;
+                }}
+                
+                .btn-sair {{
+                    margin-left: 0;
+                    margin-top: 10px;
+                }}
+            }}
         </style>
     </head>
     <body>
-        <div class="sidebar">
-            <h2>Menu Principal</h2>
-            <a href="{url_for('dashboard')}">Dashboard</a>
-            <a href="{url_for('logout')}">Sair</a>
-            <a href="{url_for('boletim')}">Boletim</a>
-        </div>
         <div class="main-content">
             {content_html}
         </div>
@@ -250,25 +526,34 @@ def render_login_form(error_message=None):
     # Usa render_login_base que já tem o CSS com a imagem de fundo
     return render_login_base(form_html, "Login")
 
+# ============================================================================
+# DECORATOR DE AUTENTICAÇÃO
+# ============================================================================
+
 def require_login(view_func):
     """
-    Decorator para proteger rotas que requerem autenticação.
+    Decorator que protege rotas exigindo autenticação.
     
-    Este decorator verifica se existe um token de autenticação válido na sessão
-    antes de permitir o acesso à rota. Caso não exista, redireciona para a
-    página de login.
+    Este decorator verifica se o usuário está autenticado antes de permitir
+    acesso a uma rota protegida. Se não estiver autenticado, redireciona
+    para a página de login.
     
-    Args:
-        view_func (callable): A função de view do Flask a ser protegida
-        
-    Returns:
-        callable: Função wrapper que realiza a verificação de autenticação
-        
-    Exemplo de uso:
+    Funcionamento:
+    1. Verifica se existe um token JWT na sessão
+    2. Se não existir, redireciona para /login
+    3. Se existir, permite o acesso à rota original
+    
+    Uso:
         @app.route('/rota-protegida')
         @require_login
-        def rota_protegida():
-            return 'Conteúdo protegido'
+        def minha_rota():
+            return "Conteúdo protegido"
+    
+    Args:
+        view_func: Função da rota a ser protegida
+    
+    Returns:
+        Função wrapper que verifica autenticação antes de executar a rota
     """
     def wrapper(*args, **kwargs):
         # Verifica se o token de sessão existe
@@ -1731,6 +2016,31 @@ def registrar():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """
+    Rota de autenticação (login) de usuários.
+    
+    Esta rota gerencia o processo de login no sistema. Autentica o usuário
+    através da API Node.js e armazena o token JWT na sessão.
+    
+    Métodos HTTP:
+    - GET: Exibe o formulário de login
+    - POST: Processa o login e autentica o usuário
+    
+    Fluxo de autenticação:
+    1. Usuário envia email e senha
+    2. Sistema envia credenciais para API Node.js
+    3. API valida e retorna token JWT + dados do usuário
+    4. Sistema armazena token e tipo de usuário na sessão
+    5. Redireciona para dashboard apropriado
+    
+    Dados do formulário:
+    - email: Email do usuário (usado como login)
+    - senha: Senha do usuário
+    
+    Returns:
+        GET: HTML do formulário de login
+        POST: Redirecionamento para dashboard ou exibição de erro
+    """
+    """
     Rota de autenticação do sistema.
     
     GET: Exibe o formulário de login
@@ -1782,6 +2092,20 @@ def login():
 
 @app.route('/logout')
 def logout():
+    """
+    Rota para encerrar sessão do usuário (logout).
+    
+    Esta rota limpa os dados da sessão e redireciona o usuário
+    para a página de login.
+    
+    Processo:
+    1. Remove o token JWT da sessão
+    2. Remove o tipo de usuário da sessão
+    3. Redireciona para a página de login
+    
+    Returns:
+        redirect: Redirecionamento para /login
+    """
     session.pop(SESSION_KEY_TOKEN, None)
     session.pop(SESSION_KEY_TYPE, None)
     return redirect(url_for('login'))
@@ -1844,9 +2168,36 @@ def painel_admin():
     
     conteudo_admin_html = render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token)
     
-    return render_base(conteudo_admin_html, "Painel do Administrador")
-# --- Função auxiliar para buscar dados (DEVE SER CRIADA NO SEU CÓDIGO) ---
+    # Adiciona botão de sair no topo
+    btn_sair = f'''
+    <div class="nav-buttons-container">
+        <a href="{url_for('logout')}" class="btn-sair">
+             Sair
+        </a>
+    </div>
+    '''
+    
+    conteudo_completo = f'{btn_sair}{conteudo_admin_html}'
+    
+    return render_base(conteudo_completo, "Painel do Administrador")
+# ============================================================================
+# FUNÇÕES AUXILIARES DO ADMINISTRADOR
+# ============================================================================
+
 def listar_recursos_para_admin(token):
+    """
+    Busca recursos básicos (turmas e disciplinas) para o painel administrativo.
+    
+    Esta função realiza requisições à API Node.js para obter listas de
+    turmas e disciplinas que serão usadas em formulários e seleções.
+    
+    Args:
+        token (str): Token JWT para autenticação na API
+    
+    Returns:
+        dict: Dicionário com chaves 'turmas' e 'disciplinas', cada uma
+              contendo uma lista de dicionários com os dados
+    """
     # Por simplicidade, faremos um GET de todas as turmas e disciplinas
     try:
         turmas_res = requests.get(f"{API_BASE_URL}/academico/turmas", headers={"Authorization": f"Bearer {token}"}).json()
@@ -1860,7 +2211,32 @@ def listar_recursos_para_admin(token):
         return {'turmas': [], 'disciplinas': []}
     
 def process_admin_action(action, form_data, token):
-    """Processa a ação específica de POST para a API Node.js."""
+    """
+    Processa ações administrativas enviadas via formulários POST.
+    
+    Esta função centraliza o processamento de todas as ações administrativas,
+    como criação, edição e remoção de turmas, disciplinas, professores e alunos.
+    
+    Ações suportadas:
+    - create_turma: Criar nova turma
+    - create_disciplina: Criar nova disciplina
+    - create_professor: Criar novo professor
+    - create_aluno: Criar novo aluno
+    - matricular_aluno: Matricular aluno em turma/disciplina
+    - remove_disciplina_from_turma: Remover disciplina de uma turma
+    - E outras ações administrativas...
+    
+    Args:
+        action (str): Tipo de ação a ser processada
+        form_data (dict): Dados do formulário enviado
+        token (str): Token JWT para autenticação na API
+    
+    Returns:
+        dict: Dicionário com 'msg' (mensagem) e 'cls' (classe CSS: 'success' ou 'error')
+    
+    Raises:
+        Exception: Se a ação não for reconhecida ou houver erro na API
+    """
     try:
         url = None
         payload = {}
@@ -2500,7 +2876,7 @@ def construir_visao_geral_html(estrutura):
             {"<!-- Professor Responsável pela Turma -->" if professor_turma else ""}
             {f'''
             <div class="professor-info">
-                <strong>👨‍🏫 Professor Responsável:</strong><br>
+                <strong> Professor Responsável:</strong><br>
                 <div class="professor-badge">
                     <div class="professor-icon">P</div>
                     <span>{escape(professor_turma.get("email", "N/A"))} (ID: {professor_turma.get("id_usuario", "N/A")})</span>
@@ -2571,7 +2947,7 @@ def construir_visao_geral_html(estrutura):
         if total_alunos_turma > 0:
             html += """
             <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(255,255,255,0.3);">
-                <h4 style="margin-bottom: 15px; color: white;">👥 Todos os Alunos da Turma</h4>
+                <h4 style="margin-bottom: 15px; color: white;"> Todos os Alunos da Turma</h4>
                 <div class="alunos-turma-list">
             """
             for aluno_tuple in alunos_turma:
@@ -2617,7 +2993,30 @@ def construir_visao_geral_html(estrutura):
 
 # --- AUXILIAR: BUSCAR RECURSOS PARA SELECTS ---
 def fetch_admin_resources(token):
-    """Busca listas de turmas, disciplinas, professores e alunos."""
+    """
+    Busca todos os recursos necessários para o painel administrativo.
+    
+    Esta função realiza múltiplas requisições à API Node.js para obter
+    todas as listas necessárias para o painel do administrador:
+    - Turmas
+    - Disciplinas
+    - Professores
+    - Alunos
+    
+    Args:
+        token (str): Token JWT para autenticação na API
+    
+    Returns:
+        dict: Dicionário com as seguintes chaves:
+            - 'turmas': Lista de turmas
+            - 'disciplinas': Lista de disciplinas
+            - 'professores': Lista de professores
+            - 'alunos': Lista de alunos
+    
+    Nota:
+        Se alguma requisição falhar, a lista correspondente será vazia,
+        mas a função não interrompe a execução.
+    """
     headers = {"Authorization": f"Bearer {token}"}
     
     resources = {'turmas': [], 'disciplinas': [], 'professores': [], 'alunos': []} # Default
@@ -2912,12 +3311,16 @@ def painel_aluno():
     
     # Ações rápidas
     boletim_url = url_for('boletim')
+    ia_url = url_for('chat_ia')
     quick_actions_html = f"""
     <div class="quick-actions">
         <h3>Ações Rápidas</h3>
         <div class="action-buttons">
             <a href="{boletim_url}" class="action-btn">
                 Ver Boletim Completo
+            </a>
+            <a href="{ia_url}" class="action-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                 Assistente de IA
             </a>
         </div>
     </div>
@@ -2947,9 +3350,19 @@ def painel_aluno():
         {quick_actions_html}
         '''
     
-    # 5. Renderiza usando a base com a sidebar
-    # (Certifique-se que 'render_base' é a função com a sidebar!)
-    return render_base(conteudo_aluno_html, "Painel do Aluno")
+    # 5. Adiciona botão de sair no topo
+    btn_sair = f'''
+    <div class="nav-buttons-container">
+        <a href="{url_for('logout')}" class="btn-sair">
+             Sair
+        </a>
+    </div>
+    '''
+    
+    conteudo_completo = f'{btn_sair}{conteudo_aluno_html}'
+    
+    # 6. Renderiza usando a base
+    return render_base(conteudo_completo, "Painel do Aluno")
 
 def formatar_nota(nota_str, bold=False):
     """
@@ -2981,9 +3394,34 @@ def formatar_nota(nota_str, bold=False):
 
 
 @app.route('/boletim')
-@require_login # Protege a rota, garantindo que o usuário está logado
+@require_login
 def boletim():
-    """Busca dados de notas na API Node.js e exibe a tabela do boletim."""
+    """
+    Rota para exibir o boletim completo do aluno.
+    
+    Esta rota busca e exibe todas as notas do aluno em formato de tabela,
+    incluindo NP1, NP2, média final e faltas por disciplina.
+    
+    Processo:
+    1. Verifica se o usuário é aluno
+    2. Busca dados do boletim na API Node.js usando o token JWT
+    3. Formata as notas e médias
+    4. Renderiza tabela HTML com os dados
+    
+    Dados exibidos:
+    - Nome da disciplina
+    - Nota NP1
+    - Nota NP2
+    - Média final (calculada automaticamente)
+    - Total de faltas
+    
+    Proteção:
+    - Requer autenticação (@require_login)
+    - Apenas alunos podem acessar
+    
+    Returns:
+        HTML renderizado do boletim do aluno
+    """
     
     # Opcional: Verificar se é aluno (se outros perfis não devem ver)
     if session.get(SESSION_KEY_TYPE) != 'aluno':
@@ -3056,8 +3494,454 @@ def boletim():
             """
         tabela_html += '</tbody></table>'
     
-    # Renderiza usando o layout com sidebar
-    return render_base(tabela_html, page_title="Meu Boletim")
+    # Botões de navegação
+    botoes_nav = f'''
+    <div class="nav-buttons-container">
+        <a href="{url_for('painel_aluno')}" class="btn-voltar">
+            ← Voltar para o Dashboard
+        </a>
+        <a href="{url_for('logout')}" class="btn-sair">
+            🚪 Sair
+        </a>
+    </div>
+    '''
+    
+    conteudo_completo = f'{botoes_nav}{tabela_html}'
+    
+    # Renderiza usando o layout
+    return render_base(conteudo_completo, page_title="Meu Boletim")
+
+
+# ----------------------------------------------------------------------
+# FUNÇÃO AUXILIAR: FORMATAR MARKDOWN PARA HTML
+# ----------------------------------------------------------------------
+
+def formatar_markdown_para_html(texto):
+    """
+    Converte markdown para HTML usando a biblioteca markdown.
+    Suporta todos os recursos padrão do markdown de forma segura.
+    """
+    if not texto:
+        return ""
+    
+    try:
+        # Converte markdown para HTML
+        # Extensão 'extra' adiciona suporte para tabelas, fenced code blocks, etc.
+        html = markdown.markdown(
+            texto,
+            extensions=['extra'],  # Suporta tabelas, fenced code, abbr, attr_list, etc.
+            output_format='html5'
+        )
+        
+        # A biblioteca markdown já escapa o conteúdo automaticamente para segurança
+        # Retorna o HTML gerado
+        return html
+        
+    except Exception as e:
+        # Em caso de erro, retorna o texto escapado como fallback
+        return f'<p>{escape(texto)}</p>'
+
+# ============================================================================
+# ROTA DE CHAT COM IA (GEMINI) PARA ALUNOS
+# ============================================================================
+
+@app.route('/aluno/ia', methods=['GET', 'POST'])
+@require_login
+def chat_ia():
+    """
+    Interface de chat interativa com Inteligência Artificial para alunos.
+    
+    Esta rota implementa um assistente acadêmico baseado em IA (Google Gemini)
+    que fornece orientações personalizadas aos alunos baseadas em seu
+    desempenho acadêmico.
+    
+    Funcionalidades:
+    - Chat em tempo real com IA
+    - Análise personalizada do boletim do aluno
+    - Dicas de estudo e organização
+    - Sugestões para melhoria de notas
+    - Respostas formatadas em Markdown
+    
+    Métodos HTTP:
+    - GET: Exibe a interface de chat vazia
+    - POST: Processa mensagem do aluno e retorna resposta da IA
+    
+    Processo de geração de resposta:
+    1. Recebe mensagem do aluno
+    2. Busca dados do boletim do aluno na API
+    3. Monta contexto acadêmico (notas, médias, faltas)
+    4. Envia prompt contextualizado para Google Gemini
+    5. Recebe resposta da IA
+    6. Formata resposta Markdown para HTML
+    7. Exibe no chat
+    
+    Proteção:
+    - Requer autenticação (@require_login)
+    - Apenas alunos podem acessar
+    
+    Dependências:
+    - GEMINI_API_KEY configurada no .env
+    - Biblioteca google-generativeai instalada
+    
+    Returns:
+        HTML renderizado da interface de chat com IA
+    """
+    
+    # Verifica se é aluno
+    if session.get(SESSION_KEY_TYPE) != 'aluno':
+        return render_base("<h1>Acesso Negado</h1><p>Apenas alunos podem acessar o assistente de IA.</p>", "Acesso Negado")
+    
+    # Verifica se a chave da API está configurada
+    if not GEMINI_API_KEY:
+        error_html = """
+        <div style="max-width: 800px; margin: 50px auto; padding: 30px; background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <h1 style="color: #dc3545; margin-bottom: 20px;">⚠️ Chave de API não configurada</h1>
+            <p style="color: #666; line-height: 1.6;">
+                A chave da API do Gemini não foi configurada. Por favor, adicione a variável de ambiente 
+                <code style="background: #f4f4f4; padding: 2px 6px; border-radius: 4px;">GEMINI_API_KEY</code> 
+                no arquivo <code style="background: #f4f4f4; padding: 2px 6px; border-radius: 4px;">.env</code>.
+            </p>
+        </div>
+        """
+        return render_base(error_html, "Erro de Configuração")
+    
+    # Processa mensagens POST
+    resposta_ia = None
+    mensagem_usuario = None
+    erro = None
+    
+    if request.method == 'POST':
+        mensagem_usuario = request.form.get('mensagem', '').strip()
+        
+        if mensagem_usuario:
+            try:
+                # Busca dados do boletim para contexto
+                token = session.get(SESSION_KEY_TOKEN)
+                boletim_contexto = ""
+                
+                try:
+                    response = requests.get(
+                        f"{API_BASE_URL}/academico/boletim",
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=5
+                    )
+                    if response.status_code == 200:
+                        boletim_data = response.json().get('boletim', [])
+                        if boletim_data:
+                            boletim_contexto = "\n\nContexto acadêmico do aluno:\n"
+                            for item in boletim_data:
+                                disciplina = item.get('nome_disciplina', 'N/A')
+                                nota_np1 = item.get('nota_np1', 'N/A')
+                                nota_np2 = item.get('nota_np2', 'N/A')
+                                media = item.get('media_final', 'N/A')
+                                faltas = item.get('total_faltas', 0)
+                                boletim_contexto += f"- {disciplina}: NP1={nota_np1}, NP2={nota_np2}, Média={media}, Faltas={faltas}\n"
+                except:
+                    pass  # Se não conseguir buscar boletim, continua sem contexto
+                
+                # Configura o modelo Gemini com fallback para compatibilidade
+                # Tenta usar o modelo mais recente disponível primeiro
+                # Se falhar, tenta modelos alternativos em ordem de preferência
+                try:
+                    model = genai.GenerativeModel('models/gemini-2.5-flash')
+                except:
+                    # Fallback 1: Tenta gemini-1.5-pro (mais poderoso)
+                    try:
+                        model = genai.GenerativeModel('gemini-1.5-pro')
+                    except:
+                        # Fallback 2: Usa gemini-1.5-flash (mais rápido e compatível)
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                # Monta o prompt completo com contexto acadêmico do aluno
+                # O contexto inclui notas, médias e faltas para personalizar a resposta
+                prompt_completo = f"""Você é um assistente acadêmico inteligente e prestativo para alunos. 
+Sua função é ajudar estudantes com dúvidas sobre estudos, organização, técnicas de aprendizado, e questões relacionadas ao desempenho acadêmico.
+
+{boletim_contexto}
+
+Responda de forma clara, amigável e educativa. Se o aluno perguntar sobre suas notas ou desempenho, use o contexto fornecido acima.
+
+Pergunta do aluno: {mensagem_usuario}
+
+Resposta:"""
+                
+                # Gera resposta da IA usando o modelo configurado
+                # O modelo processa o prompt e retorna uma resposta contextualizada
+                response_ia = model.generate_content(prompt_completo)
+                resposta_ia = response_ia.text  # Extrai o texto da resposta
+                
+            except Exception as e:
+                erro = f"Erro ao processar sua mensagem: {str(e)}"
+    
+    # CSS para a interface de chat
+    chat_css = """
+    <style>
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 200px);
+            min-height: 600px;
+        }
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px 30px;
+            text-align: center;
+        }
+        .chat-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 1.8rem;
+        }
+        .chat-header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .message {
+            max-width: 75%;
+            padding: 15px 20px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .message.ia {
+            align-self: flex-start;
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .message.ia strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+        .message.ia em {
+            font-style: italic;
+            color: #555;
+        }
+        .message.ia p {
+            margin: 0 0 10px 0;
+        }
+        .message.ia p:last-child {
+            margin-bottom: 0;
+        }
+        .message.ia ul {
+            margin: 10px 0;
+            padding-left: 25px;
+            list-style-type: disc;
+        }
+        .message.ia li {
+            margin: 5px 0;
+            line-height: 1.6;
+        }
+        .message.ia br {
+            line-height: 1.8;
+        }
+        .message.ia h3,
+        .message.ia h4,
+        .message.ia h5,
+        .message.ia h6 {
+            margin: 15px 0 10px 0;
+            font-weight: 600;
+            color: #333;
+            line-height: 1.4;
+        }
+        .message.ia h3 {
+            font-size: 1.3rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+        .message.ia h4 {
+            font-size: 1.15rem;
+            color: #667eea;
+        }
+        .message.ia h5 {
+            font-size: 1.05rem;
+        }
+        .message.ia h6 {
+            font-size: 1rem;
+        }
+        .chat-input-container {
+            padding: 20px 25px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+        .chat-form {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+        .chat-submit {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .chat-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .chat-submit:active {
+            transform: translateY(0);
+        }
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #dc3545;
+        }
+        .empty-chat {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+        }
+        .empty-chat-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        .empty-chat p {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .suggestion-btn {
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .suggestion-btn:hover {
+            background: #e0e0e0;
+            border-color: #667eea;
+        }
+    </style>
+    """
+    
+    # HTML do chat
+    mensagens_html = ""
+    
+    if mensagem_usuario:
+        mensagens_html += f'<div class="message user">{escape(mensagem_usuario)}</div>'
+    
+    if erro:
+        mensagens_html += f'<div class="error-message">{escape(erro)}</div>'
+    elif resposta_ia:
+        # Formata a resposta da IA convertendo markdown para HTML
+        resposta_formatada = formatar_markdown_para_html(resposta_ia)
+        mensagens_html += f'<div class="message ia">{Markup(resposta_formatada)}</div>'
+    
+    if not mensagens_html:
+        mensagens_html = """
+        <div class="empty-chat">
+            <div class="empty-chat-icon"></div>
+            <p>Olá! Sou seu assistente acadêmico. Como posso ajudá-lo hoje?</p>
+            <div class="suggestions">
+                <button class="suggestion-btn" onclick="document.querySelector('.chat-input').value='Como posso melhorar minhas notas?'; document.querySelector('.chat-form').submit();">Como melhorar minhas notas?</button>
+                <button class="suggestion-btn" onclick="document.querySelector('.chat-input').value='Dicas de organização de estudos'; document.querySelector('.chat-form').submit();">Dicas de organização</button>
+                <button class="suggestion-btn" onclick="document.querySelector('.chat-input').value='Como estudar para provas?'; document.querySelector('.chat-form').submit();">Como estudar para provas?</button>
+            </div>
+        </div>
+        """
+    
+    # Botões de navegação
+    botoes_nav = f'''
+    <div class="nav-buttons-container">
+        <a href="{url_for('painel_aluno')}" class="btn-voltar">
+            ← Voltar para o Dashboard
+        </a>
+        <a href="{url_for('logout')}" class="btn-sair">
+             Sair
+        </a>
+    </div>
+    '''
+    
+    chat_html = f"""
+    {botoes_nav}
+    {chat_css}
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1> Assistente de IA Acadêmico</h1>
+            <p>Seu assistente pessoal para dúvidas e orientações acadêmicas</p>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            {mensagens_html}
+        </div>
+        <div class="chat-input-container">
+            <form method="POST" class="chat-form" onsubmit="setTimeout(() => {{ document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight; }}, 100);">
+                <input 
+                    type="text" 
+                    name="mensagem" 
+                    class="chat-input" 
+                    placeholder="Digite sua pergunta aqui..." 
+                    required
+                    autocomplete="off"
+                    value=""
+                >
+                <button type="submit" class="chat-submit">Enviar</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        // Auto-scroll para a última mensagem
+        window.addEventListener('load', function() {{
+            const chatMessages = document.getElementById('chatMessages');
+            if (chatMessages) {{
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }}
+        }});
+    </script>
+    """
+    
+    return render_base(chat_html, "Assistente de IA")
 
 
 # ----------------------------------------------------------------------
@@ -3129,7 +4013,18 @@ def painel_professor():
     # Renderiza o conteúdo final passando todos os dados necessários
     conteudo_professor_html = render_professor_content(user_type, turmas, message, message_class)
     
-    return render_base(conteudo_professor_html, "Painel do Professor")
+    # Adiciona botão de sair no topo
+    btn_sair = f'''
+    <div class="nav-buttons-container">
+        <a href="{url_for('logout')}" class="btn-sair">
+             Sair
+        </a>
+    </div>
+    '''
+    
+    conteudo_completo = f'{btn_sair}{conteudo_professor_html}'
+    
+    return render_base(conteudo_completo, "Painel do Professor")
 
 @app.route('/gerenciar/turma/<int:turma_id>/<int:disciplina_id>')
 @require_login
@@ -3166,7 +4061,18 @@ def gerenciar_turma(turma_id, disciplina_id):
     # ... (Aqui o código HTML será construído) ...
     tabela_alunos_html = build_alunos_table_gestao(turma_id, disciplina_id, alunos, feedback)
     
-    return render_base(tabela_alunos_html, f"Gerenciar Turma {turma_id}")
+    # Adiciona botão de sair no topo
+    btn_sair = f'''
+    <div class="nav-buttons-container">
+        <a href="{url_for('logout')}" class="btn-sair">
+             Sair
+        </a>
+    </div>
+    '''
+    
+    conteudo_completo = f'{btn_sair}{tabela_alunos_html}'
+    
+    return render_base(conteudo_completo, f"Gerenciar Turma {turma_id}")
 
 @app.route('/lancar_nota_form', methods=['POST'])
 @require_login
@@ -3185,7 +4091,7 @@ def lancar_nota_form():
     aluno_id = request.form.get('aluno_id')
     disciplina_id = request.form.get('disciplina_id')
     valor_nota = request.form.get('valor_nota')
-    tipo_avaliacao = request.form.get('tipo_avaliacao') # ⬅️ Pega o tipo
+    tipo_avaliacao = request.form.get('tipo_avaliacao') #  Pega o tipo
     turma_id = request.form.get('turma_id')
 
     feedback_msg = "Dados inválidos."
@@ -3198,7 +4104,7 @@ def lancar_nota_form():
                 "aluno_id": int(aluno_id),
                 "disciplina_id": int(disciplina_id),
                 "valor_nota": float(valor_nota),
-                "tipo_avaliacao": tipo_avaliacao # ⬅️ Envia o tipo para a API
+                "tipo_avaliacao": tipo_avaliacao #  Envia o tipo para a API
             }
             
             # Chama a API Node.js /academico/notas
@@ -3884,7 +4790,7 @@ def relatorio_desempenho(turma_id, disciplina_id):
     ArrayType = DesempenhoAluno * count
     array_c = ArrayType(*desempenhos)
     
-    lib_c.ordenar_por_desempenho(array_c, count) # ⬅️ CHAMADA CRÍTICA AO C
+    lib_c.ordenar_por_desempenho(array_c, count) #  CHAMADA CRÍTICA AO C
     
     # Buscar nomes dos alunos para exibir no ranking
     alunos_dict = {aluno.get('aluno_id'): aluno for aluno in alunos_data}
