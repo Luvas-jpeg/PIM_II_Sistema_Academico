@@ -1,6 +1,6 @@
 # Sistema Acadêmico PIM - Projeto Integrador Multidisciplinar
 
-## 📋 Sumário
+## Sumário
 
 1. [Introdução](#introdução)
 2. [Objetivos](#objetivos)
@@ -16,7 +16,7 @@
 
 ---
 
-## 🎯 Introdução
+##  Introdução
 
 O **Sistema Acadêmico PIM** é uma aplicação web completa desenvolvida como Projeto Integrador Multidisciplinar (PIM), que visa modernizar e automatizar o gerenciamento acadêmico de instituições de ensino. O sistema oferece uma plataforma integrada para gestão de alunos, professores, turmas, disciplinas, notas e relatórios acadêmicos.
 
@@ -24,16 +24,16 @@ O projeto implementa uma arquitetura moderna baseada em microserviços, utilizan
 
 ### Características Principais
 
-- ✅ **Multi-usuário**: Suporte para três perfis distintos (Aluno, Professor, Administrador)
-- ✅ **Interface Moderna**: Design responsivo e intuitivo
-- ✅ **Assistente de IA**: Integração com Google Gemini para orientação acadêmica
-- ✅ **Algoritmos Otimizados**: Biblioteca C para processamento eficiente de dados
-- ✅ **API RESTful**: Arquitetura escalável e desacoplada
-- ✅ **Segurança**: Autenticação JWT e proteção contra vulnerabilidades web
+-  **Multi-usuário**: Suporte para três perfis distintos (Aluno, Professor, Administrador)
+-  **Interface Moderna**: Design responsivo e intuitivo
+-  **Assistente de IA**: Integração com Google Gemini para orientação acadêmica
+-  **Algoritmos Otimizados**: Biblioteca C para processamento eficiente de dados
+-  **API RESTful**: Arquitetura escalável e desacoplada
+-  **Segurança**: Autenticação JWT e proteção contra vulnerabilidades web
 
 ---
 
-## 🎯 Objetivos
+##  Objetivos
 
 ### Objetivo Geral
 
@@ -63,7 +63,7 @@ Desenvolver um sistema acadêmico completo e moderno que automatize processos de
 
 ---
 
-## 🏗️ Arquitetura do Sistema
+##  Arquitetura do Sistema
 
 O sistema adota uma arquitetura em camadas com separação clara de responsabilidades:
 
@@ -72,20 +72,20 @@ O sistema adota uma arquitetura em camadas com separação clara de responsabili
 │                    CAMADA DE APRESENTAÇÃO               │
 │              (Python Flask - Frontend Web)              │
 │  - Interface do Usuário                                 │
-│  - Renderização de Templates                           │
-│  - Gerenciamento de Sessões                            │
+│  - Renderização de Templates                            |
+│  - Gerenciamento de Sessões                             |
 └──────────────────┬──────────────────────────────────────┘
                    │ HTTP/REST
 ┌──────────────────▼──────────────────────────────────────┐
 │                    CAMADA DE APLICAÇÃO                  │
-│              (Node.js - API Backend)                   │
+│              (Node.js - API Backend)                    |
 │  - Lógica de Negócio                                    │
-│  - Autenticação e Autorização                          │
-│  - Validação de Dados                                  │
+│  - Autenticação e Autorização                           |
+│  - Validação de Dados                                   |
 └──────────────────┬──────────────────────────────────────┘
                    │ SQL
 ┌──────────────────▼──────────────────────────────────────┐
-│                    CAMADA DE DADOS                       │
+│                    CAMADA DE DADOS                      |
 │              (PostgreSQL - Banco de Dados)              │
 │  - Persistência de Dados                                │
 │  - Relacionamentos e Integridade                        │
@@ -121,7 +121,7 @@ O sistema adota uma arquitetura em camadas com separação clara de responsabili
 
 ---
 
-## 💻 Tecnologias Utilizadas
+##  Tecnologias Utilizadas
 
 ### Backend
 
@@ -158,7 +158,7 @@ O sistema adota uma arquitetura em camadas com separação clara de responsabili
 
 ---
 
-## 📁 Estrutura do Projeto
+##  Estrutura do Projeto
 
 ```
 PIM_II_Sistema_Academico/
@@ -201,9 +201,9 @@ PIM_II_Sistema_Academico/
 
 ---
 
-## ⚙️ Funcionalidades
+##  Funcionalidades
 
-### 👨‍🎓 Módulo do Aluno
+###  Módulo do Aluno
 
 - **Dashboard Personalizado**
   - Visualização de média geral
@@ -224,7 +224,7 @@ PIM_II_Sistema_Academico/
   - Sugestões para melhoria de notas
   - Respostas formatadas em Markdown
 
-### 👨‍🏫 Módulo do Professor
+###  Módulo do Professor
 
 - **Painel de Controle**
   - Listagem de turmas atribuídas
@@ -242,7 +242,7 @@ PIM_II_Sistema_Academico/
   - Rankings de alunos por média
   - Análise de frequência
 
-### 👨‍💼 Módulo do Administrador
+###  Módulo do Administrador
 
 - **Gestão Completa**
   - CRUD de turmas
@@ -258,7 +258,7 @@ PIM_II_Sistema_Academico/
 
 ---
 
-## 🚀 Instalação e Configuração
+##  Instalação e Configuração
 
 ### Pré-requisitos
 
@@ -288,18 +288,7 @@ cd 01_api_nodejs
 npm install
 ```
 
-3. Configure as variáveis de ambiente (crie um arquivo `.env`):
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=sistema_academico
-DB_USER=seu_usuario
-DB_PASSWORD=sua_senha
-JWT_SECRET=sua_chave_secreta_jwt
-PORT=3000
-```
-
-4. Inicie o servidor:
+3. Inicie o servidor:
 ```bash
 npm start
 ```
@@ -440,7 +429,7 @@ O banco de dados possui as seguintes tabelas principais:
 
 ---
 
-## 🤝 Contribuições
+##  Contribuições
 
 Este é um projeto acadêmico desenvolvido como PIM. Para contribuições:
 
@@ -452,7 +441,7 @@ Este é um projeto acadêmico desenvolvido como PIM. Para contribuições:
 
 ---
 
-## 📚 Referências
+##  Referências
 
 ### Documentação Oficial
 
@@ -477,22 +466,26 @@ Este é um projeto acadêmico desenvolvido como PIM. Para contribuições:
 
 ---
 
-## 📄 Licença
+##  Licença
 
 Este projeto foi desenvolvido para fins acadêmicos como parte do Projeto Integrador Multidisciplinar (PIM).
 
 ---
 
-## 👥 Autores
+##  Autores
 
-- **Desenvolvedor Principal**: [Seu Nome]
-- **Orientador**: [Nome do Orientador]
-- **Instituição**: [Nome da Instituição]
+- **Desenvolvedor Principal**: 
+- Lucas Vinícios Martins Alves - R6602G9
+- Letícia Mocci Dezanete R.A H765GB8
+- Arthur Lucio Parmezan - H70FDH6
+- Luis Otávio Freitas Faria - R8651C0
+- Luan Alves Magalhães - H659IA0
+- **Instituição**: UNIP - Universidade Paulista
 - **Ano**: 2025
 
 ---
 
-## 📞 Contato
+##  Contato
 
 Para dúvidas ou suporte, entre em contato através do email: [seu-email@exemplo.com]
 
