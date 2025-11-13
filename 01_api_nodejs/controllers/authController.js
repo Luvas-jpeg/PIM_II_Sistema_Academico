@@ -4,16 +4,23 @@ const jwt = require('jsonwebtoken');
 
 // Função de registro para criar novos usuários
 exports.register = async (req, res) => {
+    // Log para debug
+    
     // Agora esperamos todos os dados do formulário
     const { email, senha, nome, sobrenome, data_nascimento, tipo_usuario } = req.body;
 
     // Validações básicas
-    if (!email || !senha || !nome) {
-        return res.status(400).json({ message: 'E-mail, Senha e Nome são obrigatórios.' });
+    if (!email || !senha) {
+        return res.status(400).json({ message: 'E-mail e Senha são obrigatórios.' });
     }
 
-    // Garante que o tipo seja 'aluno' se for registro completo
-    const final_tipo_usuario = tipo_usuario === 'aluno' ? 'aluno' : 'comum'; 
+    // Para alunos, nome também é obrigatório
+    if (tipo_usuario === 'aluno' && !nome) {
+        return res.status(400).json({ message: 'Nome é obrigatório para cadastro de alunos.' });
+    }
+
+    // Define o tipo de usuário (aluno, professor ou comum)
+    const final_tipo_usuario = ['aluno', 'professor'].includes(tipo_usuario) ? tipo_usuario : 'comum';
 
     // --- INÍCIO DA TRANSAÇÃO ---
     const client = await db.getClient(); // Obtém um cliente do pool para transação

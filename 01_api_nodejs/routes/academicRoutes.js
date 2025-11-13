@@ -82,6 +82,14 @@ router.get(
     academicController.getAllDisciplinas
 );
 
+// Rota para listar disciplinas de uma turma específica
+router.get(
+    '/turmas/:turma_id/disciplinas',
+    academicMiddleware.isAuthenticated,
+    academicMiddleware.isProfessorOrAdmin,
+    academicController.getDisciplinasByTurma
+);
+
 router.post( 
     '/turmas/remover-disciplina', 
     academicMiddleware.isAuthenticated,
@@ -95,6 +103,14 @@ router.delete(
     academicMiddleware.isAuthenticated,
     academicMiddleware.isAdmin,
     academicController.deleteDisciplina
+);
+
+// Rota para EXCLUIR uma turma (Admin)
+router.delete(
+    '/turmas/:turma_id', // Ex: DELETE /api/academico/turmas/3
+    academicMiddleware.isAuthenticated,
+    academicMiddleware.isAdmin,
+    academicController.deleteTurma
 );
 
 router.delete(

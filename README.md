@@ -356,7 +356,7 @@ GEMINI_API_KEY=sua_chave_aqui
 
 ---
 
-## 📖 Como Utilizar
+##  Como Utilizar
 
 ### Primeiro Acesso
 
@@ -367,8 +367,8 @@ GEMINI_API_KEY=sua_chave_aqui
 ### Para Alunos
 
 1. **Visualizar Dashboard**: Após login, você será redirecionado automaticamente
-2. **Consultar Boletim**: Clique em "📋 Boletim" no dashboard
-3. **Usar Assistente de IA**: Clique em "🤖 Assistente de IA" e faça perguntas sobre seu desempenho
+2. **Consultar Boletim**: Clique em " Boletim" no dashboard
+3. **Usar Assistente de IA**: Clique em " Assistente de IA" e faça perguntas sobre seu desempenho
 
 ### Para Professores
 
@@ -386,7 +386,7 @@ GEMINI_API_KEY=sua_chave_aqui
 
 ---
 
-## 📚 Documentação Técnica
+##  Documentação Técnica
 
 ### API Endpoints
 

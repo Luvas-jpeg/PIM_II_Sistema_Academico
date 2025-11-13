@@ -1081,17 +1081,24 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token=
         <h2 class="admin-section-title">Gestão de Turmas</h2>
         <div class="admin-grid">
             <div class="admin-card">
-                <h3>Atribuir Professor à Turma</h3>
+                <h3>Atribuir Professor à Turma (Responsável Geral)</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px;">Define um professor como responsável geral da turma. Para atribuir professores específicos a disciplinas específicas, use o formulário "Associar Professor à Disciplina" abaixo.</p>
                 <form method="POST">
                     <input type="hidden" name="action" value="assign_professor">
                     <label for="turma_id">Turma:</label>
-                    <select name="turma_id" id="turma_id">{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <select name="turma_id" id="turma_id" required>
+                        <option value="">Selecione uma turma...</option>
+                        {turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}
+                    </select>
                     <label for="professor_id">Professor:</label>
                     <select name="professor_id" id="professor_id" required>
+                        <option value="">Selecione um professor...</option>
                         {professor_options if professor_options else '<option>Nenhum professor disponível</option>'}
                     </select>
-                    <div class="info-box">Selecione o professor na lista acima</div>
-                    <button type="submit" class="primary">Atribuir Professor</button>
+                    <div class="info-box" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+                        <strong>ATENÇÃO:</strong> Este formulário define o professor responsável geral da turma. Para ter professores diferentes para disciplinas diferentes na mesma turma, use o formulário "Associar Professor à Disciplina" abaixo.
+                    </div>
+                    <button type="submit" class="primary">Atribuir Professor à Turma</button>
                 </form>
             </div>
             
@@ -1109,22 +1116,35 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token=
             </div>
             
             <div class="admin-card">
-                <h3>Associar Professor à Disciplina</h3>
-                <p style="font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px;">Atribui um professor específico para uma disciplina específica dentro de uma turma. Útil quando há múltiplos professores, cada um responsável por sua disciplina.</p>
-                <div class="info-box" style="background: #fff3cd; border-left: 4px solid #ffc107; margin-bottom: 15px;">
-                    <strong>IMPORTANTE:</strong> Antes de associar o professor, você deve primeiro associar a disciplina à turma usando o formulário "Associar Disciplinas à Turma" acima.
+                <h3>Associar Professor à Disciplina (Múltiplos Professores)</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px;">Atribui um professor específico para uma disciplina específica dentro de uma turma. <strong>Este é o formulário correto para ter professores diferentes para disciplinas diferentes na mesma turma.</strong></p>
+                <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #2196f3; margin-bottom: 15px;">
+                    <strong>COMO USAR:</strong> 
+                    <ol style="margin: 5px 0; padding-left: 20px;">
+                        <li>Primeiro, associe a disciplina à turma usando o formulário "Associar Disciplinas à Turma" acima</li>
+                        <li>Depois, selecione a turma, a disciplina e o professor neste formulário</li>
+                        <li>Você pode repetir este processo para atribuir professores diferentes a outras disciplinas na mesma turma</li>
+                    </ol>
                 </div>
                 <form method="POST">
                     <input type="hidden" name="action" value="assign_professor_disciplina">
                     <label for="turma_id_prof_disc">Turma:</label>
-                    <select name="turma_id_prof_disc" id="turma_id_prof_disc" required>{turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}</select>
+                    <select name="turma_id_prof_disc" id="turma_id_prof_disc" required onchange="filtrarDisciplinasPorTurma(this.value, 'disciplina_id_prof_disc')">
+                        <option value="">Selecione uma turma...</option>
+                        {turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}
+                    </select>
                     <label for="disciplina_id_prof_disc">Disciplina:</label>
-                    <select name="disciplina_id_prof_disc" id="disciplina_id_prof_disc" required>{disciplina_options if disciplina_options else '<option>Nenhuma disciplina disponível</option>'}</select>
+                    <select name="disciplina_id_prof_disc" id="disciplina_id_prof_disc" required>
+                        <option value="">Selecione primeiro uma turma...</option>
+                    </select>
                     <label for="professor_id_prof_disc">Professor:</label>
                     <select name="professor_id_prof_disc" id="professor_id_prof_disc" required>
+                        <option value="">Selecione um professor...</option>
                         {professor_options if professor_options else '<option>Nenhum professor disponível</option>'}
                     </select>
-                    <div class="info-box">Permite que cada professor tenha sua disciplina específica na turma</div>
+                    <div class="info-box" style="background: #e8f5e9; border-left: 4px solid #4caf50;">
+                        <strong>PERMITIDO:</strong> Você pode atribuir professores diferentes para disciplinas diferentes na mesma turma. Por exemplo: Professor A para Matemática e Professor B para Português na mesma turma.
+                    </div>
                     <button type="submit" class="primary">Associar Professor à Disciplina</button>
                 </form>
             </div>
@@ -1223,7 +1243,12 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token=
             fetch(`${{apiBaseUrl}}/academico/turmas/${{turmaId}}/disciplinas`, {{
                 headers: {{'Authorization': 'Bearer ' + getToken()}}
             }})
-            .then(res => res.json())
+            .then(res => {{
+                if (!res.ok) {{
+                    throw new Error(`HTTP error! status: ${{res.status}}`);
+                }}
+                return res.json();
+            }})
             .then(data => {{
                 select.innerHTML = '<option value="">Selecione uma disciplina...</option>';
                 if (data.disciplinas && data.disciplinas.length > 0) {{
@@ -1234,12 +1259,12 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token=
                         select.appendChild(option);
                     }});
                 }} else {{
-                    select.innerHTML = '<option value="">Nenhuma disciplina encontrada para esta turma</option>';
+                    select.innerHTML = '<option value="">Nenhuma disciplina encontrada para esta turma. Associe disciplinas à turma primeiro.</option>';
                 }}
             }})
             .catch(err => {{
                 console.error('Erro ao buscar disciplinas:', err);
-                select.innerHTML = '<option value="">Erro ao carregar disciplinas</option>';
+                select.innerHTML = '<option value="">Erro ao carregar disciplinas. Verifique se a turma possui disciplinas associadas.</option>';
             }});
         }}
         
@@ -1329,6 +1354,21 @@ def render_admin_content(user_type, recursos, feedback_msg, feedback_cls, token=
                         <option value="">Selecione primeiro uma turma...</option>
                     </select>
                     <button type="submit" class="danger">Desassociar Disciplina</button>
+                </form>
+            </div>
+            
+            <div class="admin-card danger">
+                <h3>Excluir Turma</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: 0;">Exclui permanentemente uma turma do sistema. Esta ação não pode ser desfeita.</p>
+                <form method="POST" id="form_excluir_turma" onsubmit="return confirm('ATENÇÃO: A turma será excluída permanentemente do sistema!\\n\\nEsta ação não pode ser desfeita.\\n\\nTem certeza que deseja continuar?')">
+                    <input type="hidden" name="action" value="delete_turma">
+                    <label for="delete_turma_id">Turma a Excluir:</label>
+                    <select name="turma_id" id="delete_turma_id" required>
+                        <option value="">Selecione uma turma...</option>
+                        {turma_options if turma_options else '<option>Nenhuma turma disponível</option>'}
+                    </select>
+                    <div class="info-box"> Esta ação não pode ser desfeita! A exclusão pode falhar se a turma possuir disciplinas, matrículas ou outros dados associados.</div>
+                    <button type="submit" class="danger">Excluir Turma Permanentemente</button>
                 </form>
             </div>
             
@@ -2242,10 +2282,17 @@ def process_admin_action(action, form_data, token):
         payload = {}
         
         if action == 'create_professor':
+            # Para criar professor só é necessário email e senha
+            email = form_data.get('email')
+            senha = form_data.get('senha')
+            
+            if not email or not senha:
+                return {"msg": "Email e senha são obrigatórios!", "cls": "error"}
+                
             url = f"{API_BASE_URL}/auth/register"
-            payload = {"email": form_data.get('email'), "senha": form_data.get('senha'), "tipo_usuario": "professor"}
+            payload = {"email": email, "senha": senha, "tipo_usuario": "professor"}
             method = requests.post
-            success_msg = f"Professor {form_data.get('email')} criado com sucesso!"
+            success_msg = f"Professor {email} criado com sucesso!"
         
         elif action == 'create_turma':
             url = f"{API_BASE_URL}/academico/turmas"
@@ -2495,6 +2542,18 @@ def process_admin_action(action, form_data, token):
             payload = None
             method = requests.delete # Método HTTP DELETE
             success_msg = f"Notas da disciplina {disciplina_id} excluídas com sucesso!"
+
+        elif action == 'delete_turma':
+            try:
+                turma_id = int(form_data.get('turma_id'))
+            except ValueError:
+                return {"msg": "Erro: ID da Turma inválido.", "cls": "error"}
+
+            # A rota da API é DELETE /api/academico/turmas/:id
+            url = f"{API_BASE_URL}/academico/turmas/{turma_id}"
+            payload = None
+            method = requests.delete # Método HTTP DELETE
+            success_msg = f"Turma {turma_id} excluída com sucesso!"
         
         else:
             return {"msg": f"Ação desconhecida: {action}", "cls": "error"}
@@ -2547,15 +2606,6 @@ def buscar_estrutura_completa(token):
             print("[buscar_estrutura_completa] Nenhuma turma encontrada")
             return estrutura
             
-        # Busca todas as disciplinas uma vez (para otimizar)
-        todas_disciplinas = []
-        try:
-            todas_disc_res = requests.get(f"{API_BASE_URL}/academico/disciplinas", headers=headers, timeout=5)
-            if todas_disc_res.status_code == 200:
-                todas_disciplinas = todas_disc_res.json().get('disciplinas', [])
-        except Exception as e:
-            print(f"[buscar_estrutura_completa] Erro ao buscar todas as disciplinas: {e}")
-        
         # Busca todos os professores uma vez (para otimizar)
         professores_dict = {}
         try:
@@ -2578,49 +2628,64 @@ def buscar_estrutura_completa(token):
                     'alunos_por_turma': []
                 }
                 
-                # Busca disciplinas desta turma
-                # Estratégia: para cada disciplina, tenta buscar alunos na turma
-                # Se a chamada for bem-sucedida (mesmo sem alunos), a disciplina está associada à turma
+                # Busca disciplinas desta turma usando a rota específica
+                # Esta rota retorna APENAS as disciplinas realmente associadas à turma
                 disciplinas_encontradas = {}
                 
-                # Para cada disciplina disponível, verifica se está na turma
-                for disc in todas_disciplinas:
-                    disciplina_id = disc.get('disciplina_id')
-                    if not disciplina_id:
-                        continue
+                try:
+                    # Usa a rota que retorna apenas disciplinas associadas à turma
+                    disc_turma_res = requests.get(
+                        f"{API_BASE_URL}/academico/turmas/{turma_id}/disciplinas",
+                        headers=headers,
+                        timeout=5
+                    )
                     
-                    try:
-                        # Tenta buscar alunos desta turma/disciplina
-                        # Se retornar 200, a disciplina está na turma (mesmo sem alunos)
-                        alunos_res = requests.get(
-                            f"{API_BASE_URL}/academico/turmas/{turma_id}/disciplinas/{disciplina_id}/alunos",
-                            headers=headers,
-                            timeout=3  # Timeout curto
-                        )
+                    if disc_turma_res.status_code == 200:
+                        disciplinas_associadas = disc_turma_res.json().get('disciplinas', [])
                         
-                        # Se a chamada foi bem-sucedida, a disciplina está na turma
-                        if alunos_res.status_code == 200:
-                            alunos = alunos_res.json().get('alunos', [])
+                        # Para cada disciplina associada, busca alunos e professor
+                        for disc_assoc in disciplinas_associadas:
+                            disciplina_id = disc_assoc.get('disciplina_id')
+                            if not disciplina_id:
+                                continue
                             
-                            # Por enquanto, usa o professor da turma como professor da disciplina
-                            # (Futuramente pode buscar professor_id específico de turma_disciplinas)
-                            professor_disc_info = professor_turma_info
+                            # Busca professor específico da disciplina (se houver)
+                            professor_id_disc = disc_assoc.get('professor_id')
+                            professor_disc_info = None
                             
+                            if professor_id_disc:
+                                professor_disc_info = professores_dict.get(professor_id_disc)
+                            
+                            # Se não houver professor específico, usa o professor da turma
+                            if not professor_disc_info:
+                                professor_disc_info = professor_turma_info
+                            
+                            # Busca alunos desta turma/disciplina
+                            alunos = []
+                            try:
+                                alunos_res = requests.get(
+                                    f"{API_BASE_URL}/academico/turmas/{turma_id}/disciplinas/{disciplina_id}/alunos",
+                                    headers=headers,
+                                    timeout=3
+                                )
+                                
+                                if alunos_res.status_code == 200:
+                                    alunos = alunos_res.json().get('alunos', [])
+                            except Exception as e:
+                                print(f"[buscar_estrutura_completa] Erro ao buscar alunos para turma {turma_id}, disciplina {disciplina_id}: {e}")
+                            
+                            # Adiciona a disciplina encontrada
                             disciplinas_encontradas[disciplina_id] = {
-                                'info': disc,
+                                'info': disc_assoc,
                                 'alunos': alunos,
                                 'professor': professor_disc_info
                             }
-                    except requests.exceptions.Timeout:
-                        # Timeout - disciplina provavelmente não está na turma
-                        continue
-                    except requests.exceptions.RequestException as e:
-                        # 404 ou outro erro HTTP - disciplina não está na turma
-                        continue
-                    except Exception as e:
-                        # Outro tipo de erro
-                        print(f"[buscar_estrutura_completa] Erro ao buscar alunos para turma {turma_id}, disciplina {disciplina_id}: {e}")
-                        continue
+                    else:
+                        print(f"[buscar_estrutura_completa] Erro ao buscar disciplinas da turma {turma_id}: {disc_turma_res.status_code}")
+                except requests.exceptions.RequestException as e:
+                    print(f"[buscar_estrutura_completa] Erro ao buscar disciplinas da turma {turma_id}: {e}")
+                except Exception as e:
+                    print(f"[buscar_estrutura_completa] Erro inesperado ao buscar disciplinas da turma {turma_id}: {e}")
                 
                 # Armazena as disciplinas encontradas
                 estrutura[turma_id]['disciplinas'] = disciplinas_encontradas
@@ -5235,4 +5300,4 @@ if __name__ == '__main__':
     a identificação e correção de problemas.
     """
     print("Iniciando servidor Flask (porta 5000)...")
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

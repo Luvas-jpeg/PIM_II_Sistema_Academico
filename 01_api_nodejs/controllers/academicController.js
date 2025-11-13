@@ -306,13 +306,25 @@ const assignProfessorToDisciplina = async (req, res) => {
         
         console.log('[AssignProfDisciplina] Coluna verificada e existe! Prosseguindo com UPDATE...');
         
-        // 6. Atualizar o professor_id na tabela turma_disciplinas
+        // 6. Verificar se já existe um professor associado a esta disciplina (apenas para log)
+        const checkExistingProf = await client.query(
+            'SELECT professor_id FROM turma_disciplinas WHERE turma_id = $1 AND disciplina_id = $2',
+            [turma_id, disciplina_id]
+        );
+        
+        if (checkExistingProf.rows.length > 0 && checkExistingProf.rows[0].professor_id) {
+            console.log(`[AssignProfDisciplina] Já existe professor ${checkExistingProf.rows[0].professor_id} associado. Será substituído pelo professor ${professor_id}.`);
+        }
+        
+        // 7. Atualizar o professor_id na tabela turma_disciplinas
+        // IMPORTANTE: Esta função permite ter professores diferentes para disciplinas diferentes na mesma turma
+        // Ela atualiza apenas a combinação específica de turma_id + disciplina_id
         console.log('[AssignProfDisciplina] Atualizando professor_id...');
         const updateSql = `
             UPDATE turma_disciplinas 
             SET professor_id = $1 
             WHERE turma_id = $2 AND disciplina_id = $3
-            RETURNING turma_disciplina_id
+            RETURNING turma_disciplina_id, professor_id
         `;
         
         const result = await client.query(updateSql, [professor_id, turma_id, disciplina_id]);
@@ -323,6 +335,8 @@ const assignProfessorToDisciplina = async (req, res) => {
                 message: 'Associação turma-disciplina não encontrada. Certifique-se de que a disciplina está associada à turma primeiro.' 
             });
         }
+        
+        console.log(`[AssignProfDisciplina] Professor ${professor_id} associado com sucesso à disciplina ${disciplina_id} na turma ${turma_id}`);
 
         await client.query('COMMIT');
         console.log('[AssignProfDisciplina] Atualização concluída com sucesso!');
@@ -566,8 +580,11 @@ const getProfessorTurmas = async (req, res) => {
 };
 
 // Funcao para criar disciplinas
+// IMPORTANTE: Esta função apenas cria a disciplina na tabela 'disciplinas'.
+// Ela NÃO associa a disciplina a nenhuma turma automaticamente.
+// Para associar uma disciplina a uma turma, use a função assignDisciplinasToTurma.
 const createDisciplina = async (req, res) => {
-    // Apemas admins devem criar disciplinas
+    // Apenas admins devem criar disciplinas
     if (req.user.tipo_usuario !== "admin") {
         return res.status(403).json({ message: "Acesso negado. Apenas administradores!" });
     }
@@ -579,19 +596,19 @@ const createDisciplina = async (req, res) => {
     }
 
     try {
+        // Apenas insere na tabela disciplinas, sem associar a nenhuma turma
         const sql = 'INSERT INTO disciplinas (nome_disciplina, descricao) VALUES($1, $2) RETURNING *';
         const params = [nome_disciplina, descricao];
 
         const resultado = await db.query(sql, params);
         const novaDisciplina = resultado.rows[0];
 
-    // CORREÇÃO: "criada"
         res.status(201).json({
-            message: "Disciplina criada com sucesso!",
+            message: "Disciplina criada com sucesso! Lembre-se: ela ainda não está associada a nenhuma turma. Use o formulário 'Associar Disciplinas à Turma' para associá-la.",
             disciplina: novaDisciplina
         });
     } catch (error) {
-        // Erro de disciplina duplicada no SQl é 23505
+        // Erro de disciplina duplicada no SQL é 23505
         if (error.code === '23505') {
             return res.status(409).json({ message: "A disciplina já existe" });
         }
@@ -706,6 +723,51 @@ const deleteDisciplina = async (req, res) => {
     }
 };
 
+const deleteTurma = async (req, res) => {
+    // Permissão: Apenas Administradores
+    if (req.user.tipo_usuario !== 'admin') {
+        return res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
+    }
+
+    const { turma_id } = req.params; // ID vem da URL
+
+    try {
+        // Deleta da tabela 'turmas'
+        const sql = 'DELETE FROM turmas WHERE turma_id = $1 RETURNING *';
+        const params = [turma_id];
+        
+        const result = await db.query(sql, params);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Turma não encontrada para exclusão.' });
+        }
+
+        res.status(200).json({
+            message: 'Turma excluída permanentemente com sucesso!',
+            turma_excluida: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('--- [DeleteTurma] ERRO CAPTURADO ---');
+        console.error('Mensagem:', error.message);
+        console.error('Código (code):', error.code);
+        console.error('Detalhe (detail):', error.detail);
+        console.error('-------------------------------------------');
+        // Erro 23503: Violação de Chave Estrangeira (a turma está sendo usada!)
+        // Isso acontece se ela ainda estiver associada em 'turma_disciplinas', 'matriculas', etc.
+        if (error.code === '23503') {
+            console.error('[DeleteTurma] Erro 23503 (Foreign Key) detectado. Enviando 409.');
+             return res.status(409).json({ // 409 Conflict
+                 message: 'Erro: Não é possível excluir esta turma pois ela possui disciplinas, matrículas ou outros dados associados.',
+                 detail: 'Remova primeiro todas as disciplinas e matrículas associadas à turma.'
+            });
+        }
+        console.error('[DeleteTurma] Erro não tratado (23503 não detectado). Enviando 500.');
+        console.error('Erro ao excluir turma:', error);
+        res.status(500).json({ message: 'Erro no servidor.', error: error.message });
+    }
+};
+
 // Funcao para listar todas as disciplinas
 const getAllDisciplinas = async (req, res) => {
     try {
@@ -719,6 +781,44 @@ const getAllDisciplinas = async (req, res) => {
     } catch (error) {
         console.error('Erro ao listar disciplinas:', error);
         res.status(500).json({ message: 'erro no servidor', error: error.message });
+    }
+};
+
+// Função para listar disciplinas de uma turma específica
+const getDisciplinasByTurma = async (req, res) => {
+    const { turma_id } = req.params;
+
+    if (!turma_id) {
+        return res.status(400).json({ message: 'ID da turma é obrigatório.' });
+    }
+
+    try {
+        const sql = `
+            SELECT 
+                d.disciplina_id,
+                d.nome_disciplina,
+                d.descricao,
+                td.turma_disciplina_id,
+                td.professor_id
+            FROM 
+                turma_disciplinas td
+            INNER JOIN 
+                disciplinas d ON td.disciplina_id = d.disciplina_id
+            WHERE 
+                td.turma_id = $1
+            ORDER BY 
+                d.nome_disciplina ASC
+        `;
+        
+        const resultado = await db.query(sql, [turma_id]);
+
+        res.status(200).json({
+            message: 'Disciplinas da turma carregadas com sucesso!',
+            disciplinas: resultado.rows
+        });
+    } catch (error) {
+        console.error('Erro ao listar disciplinas da turma:', error);
+        res.status(500).json({ message: 'Erro no servidor', error: error.message });
     }
 };
 
@@ -1480,7 +1580,9 @@ module.exports = {
     createDisciplina,
     removeDisciplinaFromTurma,
     deleteDisciplina,
+    deleteTurma,
     getAllDisciplinas,
+    getDisciplinasByTurma,
     createAlunoProfile,
     deleteMatricula,
     matricularAluno,
