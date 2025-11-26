@@ -96,7 +96,7 @@ import markdown  # Conversão de Markdown para HTML
 
 
 # ============================================================================
-# CONFIGURAÇÕES INICIAIS E VARIÁVEIS DE AMBIENTE
+# CONFIGURAÇÕES INICIAIS E VARIÁVEIS DE  AMBIENTE
 # ============================================================================
 
 # Carrega variáveis de ambiente do arquivo .env na raiz do projeto
